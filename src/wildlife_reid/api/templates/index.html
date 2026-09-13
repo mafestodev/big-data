@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wildlife Re-Identification</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main>
+      <h1>Wildlife Re-Identification</h1>
+      <p>Upload a wildlife image to find the closest known individual.</p>
+      <form id="identify-form">
+        <label for="image">Wildlife image</label>
+        <input id="image" name="image" type="file" accept="image/*" required>
+        <button type="submit">Identify animal</button>
+      </form>
+      <section id="result" aria-live="polite"></section>
+    </main>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
+
