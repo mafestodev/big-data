@@ -31,13 +31,12 @@ gallery/        Generated gallery embeddings and identity metadata
 tests/          Unit and API tests
 ```
 
-## Eli 
-## How to test it
+## Eli - How to test it
 
 Install NumPy if necessary:
 In terminal type "pip install numpy"
 
-Then run "python test_metrics.py"
+Then run "python tests/test_metrics.py"
 
 The test uses fake embeddings and fake individual IDs to confirm that the evaluation calculations work.
 
