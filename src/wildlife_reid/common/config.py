@@ -1,3 +1,49 @@
+from dataclasses import dataclass
+from pathlib import Path
+import torch
+
+
+@dataclass
+class Settings:
+    # Swin Transformer used as our feature extractor.
+    model_name: str = "microsoft/swin-tiny-patch4-window7-224"
+
+    # Size of the embedding generated for each wildlife image.
+    embedding_dimension: int = 512
+
+    # Swin input image size.
+    image_size: int = 224
+
+    # Number of images processed in each training batch.
+    batch_size: int = 32
+
+    # Training learning rate.
+    learning_rate: float = 1e-4
+
+    # Weight decay used by AdamW.
+    weight_decay: float = 1e-4
+
+    # Number of complete passes through the training dataset.
+    num_epochs: int = 5
+
+    # ArcFace parameters.
+    arcface_scale: float = 64.0
+    arcface_margin: float = 0.5
+
+    # Number of DataLoader worker processes.
+    num_workers: int = 2
+
+    # Location where the trained embedding model will be saved.
+    checkpoint_path: Path = Path("models/swin_embedding_model.pt")
+
+    # Gallery location used later by inference.
+    gallery_path: Path = Path("gallery/gallery.npz")
+
+    # Use the GPU when one is available.
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+"""
 from __future__ import annotations
 
 import os
@@ -36,3 +82,4 @@ class Settings:
             device=os.getenv("WILDLIFE_DEVICE", cls.device),
         )
 
+"""
