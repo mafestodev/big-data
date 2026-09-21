@@ -1,31 +1,83 @@
-from __future__ import annotations
 
 import torch
-from torch import nn
+import torch.nn as nn
 import torch.nn.functional as F
 
 
-class ArcFaceHead(nn.Module):
-    """Additive angular-margin classification head used only during training."""
+class ArcFace(nn.Module):
+    """
+    ArcFace classification head used to train discriminative embeddings.
+    """
 
     def __init__(
         self,
-        embedding_dimension: int,
-        number_of_classes: int,
-        scale: float = 64.0,
-        margin: float = 0.5,
-    ) -> None:
+        embedding_dimension,
+        num_classes,
+        scale=64.0,
+        margin=0.5
+    ):
         super().__init__()
+
         self.scale = scale
         self.margin = margin
-        self.weight = nn.Parameter(torch.empty(number_of_classes, embedding_dimension))
+
+        # Learnable class prototypes.
+        self.weight = nn.Parameter(
+            torch.empty(
+                num_classes,
+                embedding_dimension
+            )
+        )
+
+        # Initialise ArcFace weights.
         nn.init.xavier_uniform_(self.weight)
 
-    def forward(self, embeddings: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        cosine = F.linear(F.normalize(embeddings), F.normalize(self.weight))
-        cosine = cosine.clamp(-1.0 + 1e-7, 1.0 - 1e-7)
-        target_angles = torch.acos(cosine)
-        margin_logits = torch.cos(target_angles + self.margin)
-        one_hot = F.one_hot(labels, num_classes=cosine.shape[1]).to(cosine.dtype)
-        logits = one_hot * margin_logits + (1.0 - one_hot) * cosine
-        return logits * self.scale
+
+    def forward(self, embeddings, labels):
+
+        # Normalise the class weights.
+        normalized_weights = F.normalize(
+            self.weight,
+            p=2,
+            dim=1
+        )
+
+        # Cosine similarity between each embedding
+        # and every training identity.
+        cosine = F.linear(
+            embeddings,
+            normalized_weights
+        )
+
+        # Keep values inside the safe numerical range for acos.
+        cosine = torch.clamp(
+            cosine,
+            -1.0 + 1e-7,
+            1.0 - 1e-7
+        )
+
+        # Convert cosine similarity into angles.
+        theta = torch.acos(cosine)
+
+        # Apply the angular margin.
+        target_cosine = torch.cos(
+            theta + self.margin
+        )
+
+        # Identify the correct class for every image.
+        one_hot = F.one_hot(
+            labels,
+            num_classes=cosine.size(1)
+        ).float()
+
+        # Apply the ArcFace margin only to the correct identity.
+        logits = (
+            one_hot * target_cosine
+            +
+            (1.0 - one_hot) * cosine
+        )
+
+        # Apply ArcFace scaling.
+        logits = logits * self.scale
+
+        return logits

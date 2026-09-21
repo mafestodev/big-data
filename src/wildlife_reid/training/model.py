@@ -1,31 +1,68 @@
-from __future__ import annotations
 
 import torch
-from torch import nn
+import torch.nn as nn
 import torch.nn.functional as F
+
+from transformers import SwinConfig, SwinModel
 
 
 class SwinEmbeddingModel(nn.Module):
-    """Swin backbone followed by a normalized embedding projection."""
+    """
+    Swin Transformer feature extractor followed by an embedding layer.
+    """
 
     def __init__(
         self,
-        model_name: str = "swin_tiny_patch4_window7_224",
-        embedding_dimension: int = 512,
-        pretrained: bool = True,
-    ) -> None:
+        model_name,
+        embedding_dimension,
+        pretrained=True
+    ):
         super().__init__()
-        try:
-            import timm
-        except ImportError as exc:  # pragma: no cover - dependency error path
-            raise RuntimeError("Install project dependencies to create the model") from exc
 
-        self.backbone = timm.create_model(model_name, pretrained=pretrained, num_classes=0)
-        feature_dimension = self.backbone.num_features
-        self.projection = nn.Linear(feature_dimension, embedding_dimension)
+        # During training we begin with pretrained Swin weights.
+        if pretrained:
+            self.backbone = SwinModel.from_pretrained(
+                model_name
+            )
 
-    def forward(self, images: torch.Tensor) -> torch.Tensor:
-        features = self.backbone(images)
-        embeddings = self.projection(features)
-        return F.normalize(embeddings, p=2, dim=1)
+        # During inference the architecture is created first,
+        # after which our trained checkpoint is loaded into it.
+        else:
+            config = SwinConfig.from_pretrained(
+                model_name
+            )
 
+            self.backbone = SwinModel(config)
+
+        # Determine Swin's output feature size.
+        hidden_size = self.backbone.config.hidden_size
+
+        # Project Swin features into our chosen embedding space.
+        self.embedding_layer = nn.Linear(
+            hidden_size,
+            embedding_dimension
+        )
+
+
+    def forward(self, pixel_values):
+
+        # Extract image features using Swin.
+        outputs = self.backbone(
+            pixel_values=pixel_values
+        )
+
+        # Obtain Swin's pooled image representation.
+        features = outputs.pooler_output
+
+        # Convert the features into our embedding representation.
+        embeddings = self.embedding_layer(features)
+
+        # L2 normalisation makes embeddings suitable for
+        # angular/cosine-based comparison.
+        embeddings = F.normalize(
+            embeddings,
+            p=2,
+            dim=1
+        )
+
+        return embeddings
