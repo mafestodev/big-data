@@ -1,0 +1,4 @@
+[console_scripts]
+wildlife-api = wildlife_reid.api.app:main
+wildlife-build-gallery = wildlife_reid.gallery.build_gallery:main
+wildlife-train = wildlife_reid.training.train:main
