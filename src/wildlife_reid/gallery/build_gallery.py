@@ -14,7 +14,9 @@ from wildlife_reid.common.config import Settings
 from wildlife_reid.training.model import SwinEmbeddingModel
 
 
-class GalleryDataset(Dataset):
+class EmbeddingDataset(Dataset):
+    """Dataset used to convert metadata records into model embeddings."""
+
     def __init__(
         self,
         metadata,
@@ -33,6 +35,11 @@ class GalleryDataset(Dataset):
 
         image_path = self.dataset_path / row["path"]
 
+        if not image_path.exists():
+            raise FileNotFoundError(
+                f"Image not found: {image_path}"
+            )
+
         image = Image.open(image_path).convert("RGB")
 
         processed = self.image_processor(
@@ -46,30 +53,50 @@ class GalleryDataset(Dataset):
 
 
 def load_metadata(metadata_path):
-    with open(metadata_path, "r", newline="", encoding="utf-8") as file:
-        reader = csv.DictReader(file)
-        metadata = list(reader)
+    """Load metadata containing image paths and identity labels."""
 
-    required_columns = {"path", "identity"}
+    metadata_path = Path(metadata_path)
 
-    if not required_columns.issubset(reader.fieldnames or []):
-        raise ValueError(
-            "Metadata must contain 'path' and 'identity' columns."
+    if not metadata_path.exists():
+        raise FileNotFoundError(
+            f"Metadata file not found: {metadata_path}"
         )
 
+    with open(
+        metadata_path,
+        "r",
+        newline="",
+        encoding="utf-8",
+    ) as file:
+        reader = csv.DictReader(file)
+        fieldnames = reader.fieldnames or []
+
+        required_columns = {"path", "identity"}
+
+        if not required_columns.issubset(fieldnames):
+            raise ValueError(
+                "Metadata must contain 'path' and 'identity' columns."
+            )
+
+        metadata = list(reader)
+
     if not metadata:
-        raise ValueError("Metadata file contains no records.")
+        raise ValueError(
+            "Metadata file contains no records."
+        )
 
     return metadata
 
 
-def build_gallery(
+def generate_embeddings(
     checkpoint_path,
     metadata_path,
     dataset_path,
     output_path,
     batch_size,
 ):
+    """Generate embeddings from a trained checkpoint."""
+
     settings = Settings()
 
     device = torch.device(settings.device)
@@ -78,13 +105,13 @@ def build_gallery(
 
     metadata = load_metadata(metadata_path)
 
-    print("Gallery images:", len(metadata))
+    print("Images:", len(metadata))
 
     image_processor = AutoImageProcessor.from_pretrained(
         settings.model_name
     )
 
-    dataset = GalleryDataset(
+    dataset = EmbeddingDataset(
         metadata=metadata,
         dataset_path=dataset_path,
         image_processor=image_processor,
@@ -106,6 +133,13 @@ def build_gallery(
 
     checkpoint_path = Path(checkpoint_path)
 
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(
+            f"Checkpoint not found: {checkpoint_path}"
+        )
+
+    print("Loading checkpoint:", checkpoint_path)
+
     model.load_state_dict(
         torch.load(
             checkpoint_path,
@@ -123,7 +157,9 @@ def build_gallery(
     print("Generating embeddings...")
 
     with torch.no_grad():
-        for batch_index, (images, batch_identities) in enumerate(loader):
+        for batch_index, (images, batch_identities) in enumerate(
+            loader
+        ):
             images = images.to(
                 device,
                 non_blocking=True,
@@ -152,6 +188,11 @@ def build_gallery(
         dtype=str,
     )
 
+    if len(embeddings) != len(identities):
+        raise RuntimeError(
+            "Number of embeddings does not match number of identities."
+        )
+
     if embeddings.shape[1] != settings.embedding_dimension:
         raise RuntimeError(
             f"Expected {settings.embedding_dimension}-D embeddings, "
@@ -172,46 +213,73 @@ def build_gallery(
     )
 
     print()
-    print("Gallery build complete.")
+    print("Embedding generation complete.")
     print("Embedding shape:", embeddings.shape)
-    print("Identity count:", len(identities))
+    print("Identity labels:", len(identities))
     print("Saved to:", output_path)
+
+    return embeddings, identities
+
+
+def build_gallery(
+    checkpoint_path,
+    metadata_path,
+    dataset_path,
+    output_path,
+    batch_size,
+):
+    """Build a reference gallery of embeddings."""
+
+    print("Building gallery...")
+    
+    return generate_embeddings(
+        checkpoint_path=checkpoint_path,
+        metadata_path=metadata_path,
+        dataset_path=dataset_path,
+        output_path=output_path,
+        batch_size=batch_size,
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build the reference embedding gallery"
+        description="Generate wildlife re-identification embeddings"
     )
 
     parser.add_argument(
         "--checkpoint",
         required=True,
+        help="Path to trained model checkpoint",
     )
 
     parser.add_argument(
         "--metadata",
         required=True,
+        help="CSV containing path and identity columns",
     )
 
     parser.add_argument(
         "--dataset-path",
         required=True,
+        help="Root directory containing the dataset images",
     )
 
     parser.add_argument(
         "--output",
         default="gallery/embeddings.npz",
+        help="Output NPZ file",
     )
 
     parser.add_argument(
         "--batch-size",
         type=int,
         default=32,
+        help="Embedding batch size",
     )
 
     args = parser.parse_args()
 
-    build_gallery(
+    generate_embeddings(
         checkpoint_path=args.checkpoint,
         metadata_path=args.metadata,
         dataset_path=args.dataset_path,
