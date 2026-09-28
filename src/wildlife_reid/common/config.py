@@ -22,7 +22,7 @@ class Settings:
     image_size: int = 224
 
     # Number of images processed in each training batch.
-    batch_size: int = 32
+    batch_size: int = 8
 
     # Training learning rate.
     learning_rate: float = 1e-4

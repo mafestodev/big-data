@@ -182,6 +182,15 @@ def train_model(
         weight_decay=settings.weight_decay,
     )
 
+    checkpoint_path = Path(
+        settings.checkpoint_path
+    )
+
+    checkpoint_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
     print()
     print("Starting training...")
     print()
@@ -244,14 +253,22 @@ def train_model(
             f"Average loss: {average_loss:.4f}"
         )
 
-    checkpoint_path = Path(
-        settings.checkpoint_path
-    )
+        epoch_checkpoint_path = checkpoint_path.with_name(
+            f"{checkpoint_path.stem}_epoch_{epoch + 1}"
+            f"{checkpoint_path.suffix}"
+        )
 
-    checkpoint_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+        torch.save(
+            model.state_dict(),
+            epoch_checkpoint_path,
+        )
+
+        print(
+            "Epoch checkpoint saved to:",
+            epoch_checkpoint_path,
+        )
+
+        print()
 
     torch.save(
         model.state_dict(),
@@ -261,7 +278,7 @@ def train_model(
     print()
     print("Training complete.")
     print(
-        "Checkpoint saved to:",
+        "Final checkpoint saved to:",
         checkpoint_path,
     )
 
