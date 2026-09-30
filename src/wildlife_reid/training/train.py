@@ -92,15 +92,117 @@ def create_identity_mapping(train_metadata):
     }
 
 
+def find_latest_checkpoint(checkpoint_path):
+    """
+    Find the most recent epoch checkpoint.
+
+    Returns None if no epoch checkpoint exists.
+    """
+
+    checkpoint_path = Path(checkpoint_path)
+
+    checkpoint_files = list(
+        checkpoint_path.parent.glob(
+            f"{checkpoint_path.stem}_epoch_*{checkpoint_path.suffix}"
+        )
+    )
+
+    if not checkpoint_files:
+        return None
+
+    def get_epoch_number(path):
+        try:
+            return int(
+                path.stem.rsplit("_epoch_", 1)[1]
+            )
+        except (IndexError, ValueError):
+            return -1
+
+    checkpoint_files.sort(
+        key=get_epoch_number
+    )
+
+    return checkpoint_files[-1]
+
+
+def save_checkpoint(
+    checkpoint_path,
+    epoch,
+    model,
+    arcface,
+    optimizer,
+    average_loss,
+):
+    """Save a complete training checkpoint."""
+
+    checkpoint = {
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "arcface_state_dict": arcface.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "loss": average_loss,
+    }
+
+    torch.save(
+        checkpoint,
+        checkpoint_path,
+    )
+
+
+def load_checkpoint(
+    checkpoint_path,
+    model,
+    arcface,
+    optimizer,
+    device,
+):
+    """Load a complete training checkpoint."""
+
+    print(
+        "Loading checkpoint:",
+        checkpoint_path,
+    )
+
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location=device,
+        weights_only=False,
+    )
+
+    model.load_state_dict(
+        checkpoint["model_state_dict"]
+    )
+
+    arcface.load_state_dict(
+        checkpoint["arcface_state_dict"]
+    )
+
+    optimizer.load_state_dict(
+        checkpoint["optimizer_state_dict"]
+    )
+
+    completed_epoch = checkpoint["epoch"]
+
+    print(
+        f"Checkpoint loaded. "
+        f"Training completed through epoch "
+        f"{completed_epoch}."
+    )
+
+    return completed_epoch
+
+
 def train_model(
     train_metadata,
     dataset_path,
     identity_to_label,
+    resume=False,
 ):
     """
     Train the Swin embedding model using ArcFace.
 
-    Returns the trained embedding model.
+    Supports saving and resuming complete training
+    checkpoints.
     """
 
     settings = Settings()
@@ -108,7 +210,10 @@ def train_model(
     device = torch.device(settings.device)
 
     print("Training device:", device)
-    print("Training identities:", len(identity_to_label))
+    print(
+        "Training identities:",
+        len(identity_to_label),
+    )
 
     image_processor = AutoImageProcessor.from_pretrained(
         settings.model_name
@@ -123,8 +228,15 @@ def train_model(
         num_workers=settings.num_workers,
     )
 
-    print("Training images:", len(train_dataset))
-    print("Training batches:", len(train_loader))
+    print(
+        "Training images:",
+        len(train_dataset),
+    )
+
+    print(
+        "Training batches:",
+        len(train_loader),
+    )
 
     model = SwinEmbeddingModel(
         model_name=settings.model_name,
@@ -191,20 +303,86 @@ def train_model(
         exist_ok=True,
     )
 
+    start_epoch = 0
+
+    # ---------------------------------------------------------
+    # RESUME FROM LATEST CHECKPOINT
+    # ---------------------------------------------------------
+
+    if resume:
+
+        latest_checkpoint = find_latest_checkpoint(
+            checkpoint_path
+        )
+
+        if latest_checkpoint is None:
+
+            print(
+                "Resume requested, but no epoch checkpoint "
+                "was found."
+            )
+
+            print(
+                "Starting training from the beginning."
+            )
+
+        else:
+
+            start_epoch = load_checkpoint(
+                checkpoint_path=latest_checkpoint,
+                model=model,
+                arcface=arcface,
+                optimizer=optimizer,
+                device=device,
+            )
+
+    # ---------------------------------------------------------
+    # CHECK WHETHER TRAINING IS ALREADY COMPLETE
+    # ---------------------------------------------------------
+
+    if start_epoch >= settings.num_epochs:
+
+        print()
+        print(
+            "Training is already complete."
+        )
+
+        print(
+            f"Completed epochs: {start_epoch}"
+        )
+
+        return model
+
     print()
-    print("Starting training...")
+    print(
+        f"Starting training from epoch "
+        f"{start_epoch + 1}."
+    )
+
+    print(
+        f"Total epochs: {settings.num_epochs}"
+    )
+
     print()
 
-    for epoch in range(settings.num_epochs):
+    # ---------------------------------------------------------
+    # TRAINING LOOP
+    # ---------------------------------------------------------
+
+    for epoch in range(
+        start_epoch,
+        settings.num_epochs,
+    ):
 
         model.train()
         arcface.train()
 
         running_loss = 0.0
 
-        for batch_index, (images, labels) in enumerate(
-            train_loader
-        ):
+        for batch_index, (
+            images,
+            labels,
+        ) in enumerate(train_loader):
 
             images = images.to(
                 device,
@@ -236,31 +414,48 @@ def train_model(
 
             running_loss += loss.item()
 
-            if (batch_index + 1) % 100 == 0:
+            if (
+                batch_index + 1
+            ) % 100 == 0:
 
                 print(
-                    f"Epoch [{epoch + 1}/{settings.num_epochs}] "
-                    f"Batch [{batch_index + 1}/{len(train_loader)}] "
+                    f"Epoch [{epoch + 1}/"
+                    f"{settings.num_epochs}] "
+                    f"Batch [{batch_index + 1}/"
+                    f"{len(train_loader)}] "
                     f"Loss: {loss.item():.4f}"
                 )
 
         average_loss = (
-            running_loss / len(train_loader)
+            running_loss
+            / len(train_loader)
         )
 
+        print()
         print(
             f"Epoch {epoch + 1} complete. "
             f"Average loss: {average_loss:.4f}"
         )
 
-        epoch_checkpoint_path = checkpoint_path.with_name(
-            f"{checkpoint_path.stem}_epoch_{epoch + 1}"
-            f"{checkpoint_path.suffix}"
+        # -----------------------------------------------------
+        # SAVE COMPLETE EPOCH CHECKPOINT
+        # -----------------------------------------------------
+
+        epoch_checkpoint_path = (
+            checkpoint_path.with_name(
+                f"{checkpoint_path.stem}"
+                f"_epoch_{epoch + 1}"
+                f"{checkpoint_path.suffix}"
+            )
         )
 
-        torch.save(
-            model.state_dict(),
-            epoch_checkpoint_path,
+        save_checkpoint(
+            checkpoint_path=epoch_checkpoint_path,
+            epoch=epoch + 1,
+            model=model,
+            arcface=arcface,
+            optimizer=optimizer,
+            average_loss=average_loss,
         )
 
         print(
@@ -270,13 +465,24 @@ def train_model(
 
         print()
 
-    torch.save(
-        model.state_dict(),
-        checkpoint_path,
+    # ---------------------------------------------------------
+    # SAVE FINAL CHECKPOINT
+    # ---------------------------------------------------------
+
+    save_checkpoint(
+        checkpoint_path=checkpoint_path,
+        epoch=settings.num_epochs,
+        model=model,
+        arcface=arcface,
+        optimizer=optimizer,
+        average_loss=average_loss,
     )
 
     print()
-    print("Training complete.")
+    print(
+        "Training complete."
+    )
+
     print(
         "Final checkpoint saved to:",
         checkpoint_path,
@@ -286,8 +492,12 @@ def train_model(
 
 
 def main():
+
     parser = argparse.ArgumentParser(
-        description="Train the wildlife re-identification model"
+        description=(
+            "Train the wildlife "
+            "re-identification model"
+        )
     )
 
     parser.add_argument(
@@ -296,6 +506,15 @@ def main():
         help=(
             "Root directory of WildlifeReID-10k "
             "containing metadata.csv"
+        ),
+    )
+
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume training from the latest "
+            "epoch checkpoint."
         ),
     )
 
@@ -331,6 +550,7 @@ def main():
         train_metadata=train_metadata,
         dataset_path=dataset_path,
         identity_to_label=identity_to_label,
+        resume=args.resume,
     )
 
 
