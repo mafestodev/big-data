@@ -205,7 +205,7 @@ def train_model(
     checkpoints.
     """
 
-    settings = Settings()
+    settings = Settings.from_environment()
 
     device = torch.device(settings.device)
 
