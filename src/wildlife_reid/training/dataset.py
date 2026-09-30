@@ -1,4 +1,3 @@
-
 import os
 
 import torch
@@ -39,21 +38,19 @@ class WildlifeReIDDataset(Dataset):
         identity_to_label,
         augmentation=None
     ):
-        self.metadata = metadata.reset_index(drop=True)
+        self.metadata = list(metadata)
         self.dataset_path = dataset_path
         self.image_processor = image_processor
         self.identity_to_label = identity_to_label
         self.augmentation = augmentation
 
-
     def __len__(self):
         return len(self.metadata)
-
 
     def __getitem__(self, index):
 
         # Get metadata belonging to this image.
-        row = self.metadata.iloc[index]
+        row = self.metadata[index]
 
         # Construct the complete image path.
         image_path = os.path.join(
@@ -101,7 +98,7 @@ def create_train_loader(
     # Create training augmentation.
     train_augmentation = create_train_augmentation()
 
-    # STEP 1: Create the training Dataset.
+    # Create the training Dataset.
     train_dataset = WildlifeReIDDataset(
         metadata=train_metadata,
         dataset_path=dataset_path,
@@ -110,7 +107,7 @@ def create_train_loader(
         augmentation=train_augmentation
     )
 
-    # STEP 2: Create batches of training images.
+    # Create batches of training images.
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
