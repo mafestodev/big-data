@@ -41,7 +41,22 @@ class Settings:
     num_workers: int = 2
 
     # Location where the trained embedding model will be saved.
-    checkpoint_path: Path = PROJECT_ROOT / "models" / "swin_embedding_model.pt"
+    #
+    # This can be overridden using:
+    # WILDLIFE_CHECKPOINT_PATH
+    #
+    # This is useful in Colab because we can point the checkpoints
+    # to a shared Google Drive folder.
+    checkpoint_path: Path = Path(
+        os.getenv(
+            "WILDLIFE_CHECKPOINT_PATH",
+            str(
+                PROJECT_ROOT
+                / "models"
+                / "swin_embedding_model.pt"
+            ),
+        )
+    )
 
     # Gallery location used later by inference.
     gallery_path: Path = PROJECT_ROOT / "gallery" / "embeddings.npz"
@@ -116,7 +131,11 @@ class Settings:
             checkpoint_path=Path(
                 os.getenv(
                     "WILDLIFE_CHECKPOINT_PATH",
-                    str(cls.checkpoint_path),
+                    str(
+                        PROJECT_ROOT
+                        / "models"
+                        / "swin_embedding_model.pt"
+                    ),
                 )
             ),
             gallery_path=Path(
