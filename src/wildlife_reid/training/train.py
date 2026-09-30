@@ -133,7 +133,6 @@ def save_checkpoint(
     arcface,
     optimizer,
     average_loss,
-    scaler=None,
 ):
     """Save a complete training checkpoint safely."""
 
@@ -150,11 +149,6 @@ def save_checkpoint(
         "arcface_state_dict": arcface.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "loss": average_loss,
-        "scaler_state_dict": (
-            scaler.state_dict()
-            if scaler is not None
-            else None
-        ),
     }
 
     # Write to a temporary file first so a runtime interruption
@@ -180,7 +174,6 @@ def load_checkpoint(
     arcface,
     optimizer,
     device,
-    scaler=None,
 ):
     """Load a complete training checkpoint."""
 
@@ -206,14 +199,6 @@ def load_checkpoint(
     optimizer.load_state_dict(
         checkpoint["optimizer_state_dict"]
     )
-
-    if (
-        scaler is not None
-        and checkpoint.get("scaler_state_dict") is not None
-    ):
-        scaler.load_state_dict(
-            checkpoint["scaler_state_dict"]
-        )
 
     completed_epoch = checkpoint["epoch"]
 
@@ -248,10 +233,6 @@ def train_model(
         "Training identities:",
         len(identity_to_label),
     )
-
-    # Enable cuDNN autotuning for fixed-size image workloads.
-    if device.type == "cuda":
-        torch.backends.cudnn.benchmark = True
 
     image_processor = AutoImageProcessor.from_pretrained(
         settings.model_name
@@ -288,10 +269,7 @@ def train_model(
         iter(train_loader)
     )
 
-    sample_images = sample_images.to(
-        device,
-        non_blocking=True
-    )
+    sample_images = sample_images.to(device)
 
     model.eval()
 
@@ -335,15 +313,6 @@ def train_model(
         weight_decay=settings.weight_decay,
     )
 
-    # Mixed precision significantly reduces the amount of work
-    # required by the T4 GPU while preserving the same model,
-    # loss function, optimizer, and training objective.
-    scaler = (
-        torch.amp.GradScaler("cuda")
-        if device.type == "cuda"
-        else None
-    )
-
     checkpoint_path = Path(
         settings.checkpoint_path
     )
@@ -380,7 +349,6 @@ def train_model(
                 arcface=arcface,
                 optimizer=optimizer,
                 device=device,
-                scaler=scaler,
             )
 
     if start_epoch >= settings.num_epochs:
@@ -433,52 +401,23 @@ def train_model(
                 non_blocking=True,
             )
 
-            optimizer.zero_grad(
-                set_to_none=True
+            optimizer.zero_grad()
+
+            embeddings = model(images)
+
+            logits = arcface(
+                embeddings,
+                labels,
             )
 
-            if device.type == "cuda":
+            loss = criterion(
+                logits,
+                labels,
+            )
 
-                with torch.autocast(
-                    device_type="cuda",
-                    dtype=torch.float16,
-                ):
+            loss.backward()
 
-                    embeddings = model(images)
-
-                    logits = arcface(
-                        embeddings,
-                        labels,
-                    )
-
-                    loss = criterion(
-                        logits,
-                        labels,
-                    )
-
-                scaler.scale(loss).backward()
-
-                scaler.step(optimizer)
-
-                scaler.update()
-
-            else:
-
-                embeddings = model(images)
-
-                logits = arcface(
-                    embeddings,
-                    labels,
-                )
-
-                loss = criterion(
-                    logits,
-                    labels,
-                )
-
-                loss.backward()
-
-                optimizer.step()
+            optimizer.step()
 
             running_loss += loss.item()
 
@@ -500,7 +439,6 @@ def train_model(
         )
 
         print()
-
         print(
             f"Epoch {epoch + 1} complete. "
             f"Average loss: {average_loss:.4f}"
@@ -521,7 +459,6 @@ def train_model(
             arcface=arcface,
             optimizer=optimizer,
             average_loss=average_loss,
-            scaler=scaler,
         )
 
         print(
@@ -538,11 +475,9 @@ def train_model(
         arcface=arcface,
         optimizer=optimizer,
         average_loss=average_loss,
-        scaler=scaler,
     )
 
     print()
-
     print(
         "Training complete."
     )

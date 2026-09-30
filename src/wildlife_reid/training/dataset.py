@@ -28,11 +28,6 @@ def create_train_augmentation():
 class WildlifeReIDDataset(Dataset):
     """
     PyTorch Dataset for WildlifeReID-10k.
-
-    The dataset loads and augments images.
-
-    Hugging Face image preprocessing is intentionally performed in the
-    batch collate function rather than once per individual image.
     """
 
     def __init__(
@@ -53,47 +48,39 @@ class WildlifeReIDDataset(Dataset):
         return len(self.metadata)
 
     def __getitem__(self, index):
+
+        # Get metadata belonging to this image.
         row = self.metadata[index]
 
+        # Construct the complete image path.
         image_path = os.path.join(
             self.dataset_path,
             row["path"]
         )
 
+        # Load the image as RGB.
         image = Image.open(image_path).convert("RGB")
 
+        # Apply augmentation to training images.
         if self.augmentation is not None:
             image = self.augmentation(image)
 
-        label = self.identity_to_label[row["identity"]]
-
-        return (
-            image,
-            torch.tensor(label, dtype=torch.long)
-        )
-
-
-def create_collate_fn(image_processor):
-    """
-    Create a collate function that processes an entire batch of images
-    through the Hugging Face image processor at once.
-    """
-
-    def collate_fn(batch):
-        images, labels = zip(*batch)
-
-        processed = image_processor(
-            images=list(images),
+        # Apply the preprocessing expected by Swin.
+        processed = self.image_processor(
+            images=image,
             return_tensors="pt"
         )
 
-        pixel_values = processed["pixel_values"]
+        # Remove the temporary batch dimension.
+        pixel_values = processed["pixel_values"].squeeze(0)
 
-        labels = torch.stack(labels)
+        # Convert the wildlife identity into its numerical training label.
+        label = self.identity_to_label[row["identity"]]
 
-        return pixel_values, labels
-
-    return collate_fn
+        return (
+            pixel_values,
+            torch.tensor(label, dtype=torch.long)
+        )
 
 
 def create_train_loader(
@@ -102,14 +89,16 @@ def create_train_loader(
     image_processor,
     identity_to_label,
     batch_size,
-    num_workers=4
+    num_workers=2
 ):
     """
     Create the Dataset and DataLoader used during training.
     """
 
+    # Create training augmentation.
     train_augmentation = create_train_augmentation()
 
+    # Create the training Dataset.
     train_dataset = WildlifeReIDDataset(
         metadata=train_metadata,
         dataset_path=dataset_path,
@@ -118,14 +107,13 @@ def create_train_loader(
         augmentation=train_augmentation
     )
 
+    # Create batches of training images.
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=torch.cuda.is_available(),
-        persistent_workers=(num_workers > 0),
-        collate_fn=create_collate_fn(image_processor)
+        pin_memory=torch.cuda.is_available()
     )
 
     return train_dataset, train_loader
