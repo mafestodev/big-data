@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 from pathlib import Path
 
 import torch
@@ -133,7 +134,14 @@ def save_checkpoint(
     optimizer,
     average_loss,
 ):
-    """Save a complete training checkpoint."""
+    """Save a complete training checkpoint safely."""
+
+    checkpoint_path = Path(checkpoint_path)
+
+    checkpoint_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     checkpoint = {
         "epoch": epoch,
@@ -143,8 +151,19 @@ def save_checkpoint(
         "loss": average_loss,
     }
 
+    # Write to a temporary file first so a runtime interruption
+    # cannot leave the real checkpoint partially written.
+    temp_path = checkpoint_path.with_name(
+        checkpoint_path.name + ".tmp"
+    )
+
     torch.save(
         checkpoint,
+        temp_path,
+    )
+
+    os.replace(
+        temp_path,
         checkpoint_path,
     )
 
@@ -305,10 +324,6 @@ def train_model(
 
     start_epoch = 0
 
-    # ---------------------------------------------------------
-    # RESUME FROM LATEST CHECKPOINT
-    # ---------------------------------------------------------
-
     if resume:
 
         latest_checkpoint = find_latest_checkpoint(
@@ -336,10 +351,6 @@ def train_model(
                 device=device,
             )
 
-    # ---------------------------------------------------------
-    # CHECK WHETHER TRAINING IS ALREADY COMPLETE
-    # ---------------------------------------------------------
-
     if start_epoch >= settings.num_epochs:
 
         print()
@@ -364,10 +375,6 @@ def train_model(
     )
 
     print()
-
-    # ---------------------------------------------------------
-    # TRAINING LOOP
-    # ---------------------------------------------------------
 
     for epoch in range(
         start_epoch,
@@ -437,10 +444,6 @@ def train_model(
             f"Average loss: {average_loss:.4f}"
         )
 
-        # -----------------------------------------------------
-        # SAVE COMPLETE EPOCH CHECKPOINT
-        # -----------------------------------------------------
-
         epoch_checkpoint_path = (
             checkpoint_path.with_name(
                 f"{checkpoint_path.stem}"
@@ -464,10 +467,6 @@ def train_model(
         )
 
         print()
-
-    # ---------------------------------------------------------
-    # SAVE FINAL CHECKPOINT
-    # ---------------------------------------------------------
 
     save_checkpoint(
         checkpoint_path=checkpoint_path,
