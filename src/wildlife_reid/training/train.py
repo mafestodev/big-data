@@ -1,347 +1,374 @@
-from __future__ import annotations                     # Enable postponed evaluation of type hints.
+from __future__ import annotations
 
-import argparse                                         # Command-line argument parsing.
-import csv                                              # Reading the metadata CSV file.
-import os                                               # Environment variables and file operations.
-from pathlib import Path                                # Object-oriented filesystem paths.
+import argparse
+import csv
+import os
+from pathlib import Path
 
-import torch                                            # PyTorch core.
-import torch.nn as nn                                   # Neural network layers and losses.
-from transformers import AutoImageProcessor             # HuggingFace image preprocessing.
+import torch
+import torch.nn as nn
+from transformers import AutoImageProcessor
 
-from wildlife_reid.common.config import Settings        # Project settings loader.
-from wildlife_reid.training.arcface import ArcFace      # ArcFace classification head.
-from wildlife_reid.training.dataset import create_train_loader   # Training dataloader factory.
-from wildlife_reid.training.model import SwinEmbeddingModel      # Swin embedding backbone.
+from wildlife_reid.common.config import Settings
+from wildlife_reid.training.arcface import ArcFace
+from wildlife_reid.training.dataset import create_train_loader
+from wildlife_reid.training.model import SwinEmbeddingModel
 
 
-def load_dataset_metadata(dataset_path):                # Load the WildlifeReID metadata.csv file.
-    """Load the WildlifeReID metadata.csv file."""      # Docstring.
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
-    dataset_path = Path(dataset_path)                   # Normalize to a Path object.
 
-    metadata_path = dataset_path / "metadata.csv"       # Build the metadata file path.
+def load_dataset_metadata(dataset_path):
+    """Load the WildlifeReID metadata.csv file."""
 
-    if not metadata_path.exists():                      # Fail early if metadata is missing.
-        raise FileNotFoundError(                        # Raise a clear error.
-            f"Dataset metadata not found: {metadata_path}"   # Error message with path.
+    dataset_path = Path(dataset_path)
+
+    metadata_path = dataset_path / "metadata.csv"
+
+    if not metadata_path.exists():
+        raise FileNotFoundError(
+            f"Dataset metadata not found: {metadata_path}"
         )
 
-    with open(                                          # Open the metadata file.
-        metadata_path,                                  # Path to open.
-        "r",                                            # Read mode.
-        newline="",                                     # Let csv module handle newlines.
-        encoding="utf-8",                               # UTF-8 encoding.
-    ) as file:                                          # Context manager ensures close.
+    with open(
+        metadata_path,
+        "r",
+        newline="",
+        encoding="utf-8",
+    ) as file:
+        reader = csv.DictReader(file)
 
-        reader = csv.DictReader(file)                   # Parse rows as dicts.
-
-        required_columns = {                            # Columns we require.
-            "path",                                     # Image path column.
-            "identity",                                 # Identity label column.
-            "split",                                    # Train/val/test split column.
+        required_columns = {
+            "path",
+            "identity",
+            "split",
         }
 
-        if not required_columns.issubset(               # Check all required columns exist.
-            reader.fieldnames or []                     # Guard against None fieldnames.
+        if not required_columns.issubset(
+            reader.fieldnames or []
         ):
-            raise ValueError(                           # Raise if schema is wrong.
-                "metadata.csv must contain "            # Error message part 1.
-                "'path', 'identity', and 'split' columns."   # Error message part 2.
+            raise ValueError(
+                "metadata.csv must contain "
+                "'path', 'identity', and 'split' columns."
             )
 
-        metadata = list(reader)                         # Materialize all rows.
+        metadata = list(reader)
 
-    if not metadata:                                    # Fail if the file was empty.
-        raise ValueError(                               # Raise a clear error.
-            "metadata.csv contains no records."         # Error message.
+    if not metadata:
+        raise ValueError(
+            "metadata.csv contains no records."
         )
 
-    return metadata                                     # Return the list of rows.
+    return metadata
 
 
-def create_training_metadata(metadata):                 # Select the official training split.
-    """Select the official training split."""           # Docstring.
+def create_training_metadata(metadata):
+    """Select the official training split."""
 
-    train_metadata = [                                  # Build the training subset.
-        row                                             # Keep each row...
-        for row in metadata                             # ...from the full metadata...
-        if row["split"] == "train"                      # ...whose split is "train".
+    train_metadata = [
+        row
+        for row in metadata
+        if row["split"] == "train"
     ]
 
-    if not train_metadata:                              # Fail if no training rows found.
-        raise ValueError(                               # Raise a clear error.
-            "No records with split='train' were found." # Error message.
+    if not train_metadata:
+        raise ValueError(
+            "No records with split='train' were found."
         )
 
-    return train_metadata                               # Return the training rows.
+    return train_metadata
 
 
-def create_identity_mapping(train_metadata):            # Create a stable identity-to-label mapping.
-    """Create a stable identity-to-label mapping."""    # Docstring.
+def create_identity_mapping(train_metadata):
+    """Create a stable identity-to-label mapping."""
 
-    identities = sorted(                                # Sort identities for determinism.
-        {                                               # Build a set...
-            row["identity"]                             # ...of unique identity strings...
-            for row in train_metadata                   # ...from training rows.
+    identities = sorted(
+        {
+            row["identity"]
+            for row in train_metadata
         }
     )
 
-    return {                                            # Return the mapping dict.
-        identity: label                                 # identity string -> integer label.
-        for label, identity in enumerate(identities)    # Enumerate in sorted order.
+    return {
+        identity: label
+        for label, identity in enumerate(identities)
     }
 
 
-def parse_epoch_batch(checkpoint_file):                 # Parse (epoch, batch) from a filename.
+def parse_epoch_batch(checkpoint_file):
     """
-    Parse (epoch, batch) from a checkpoint filename.     # Docstring.
+    Parse (epoch, batch) from a checkpoint filename.
 
-    Examples:                                           # Example filenames.
-        swin_embedding_model_epoch_3.pt            -> (3, 0)     # Full-epoch checkpoint.
-        swin_embedding_model_epoch_3_batch_800.pt  -> (3, 800)   # Mid-epoch checkpoint.
-    """
+    Examples:
+        swin_embedding_model_epoch_3.pt
+            -> (3, 0)
 
-    name = Path(checkpoint_file).stem                   # Strip directory and .pt suffix.
-
-    if "_epoch_" not in name:                           # Bail out if pattern is absent.
-        return (-1, -1)                                 # Sort key that always loses.
-
-    tail = name.split("_epoch_", 1)[1]                  # Extract everything after "_epoch_".
-
-    if "_batch_" in tail:                               # Check for mid-epoch form.
-        epoch_str, batch_str = tail.split("_batch_", 1) # Split epoch and batch parts.
-        try:                                            # Attempt conversion.
-            return (int(epoch_str), int(batch_str))     # Return parsed tuple.
-        except ValueError:                              # Handle malformed numbers.
-            return (-1, -1)                             # Sort key that always loses.
-
-    try:                                                # Full-epoch form.
-        return (int(tail), 0)                           # Batch index is 0.
-    except ValueError:                                  # Handle malformed numbers.
-        return (-1, -1)                                 # Sort key that always loses.
-
-
-def find_latest_checkpoint(checkpoint_path):            # Find the latest checkpoint file.
-    """
-    Find the most recent epoch or mid-epoch checkpoint. # Docstring.
-
-    Returns None if no checkpoint exists.               # Return contract.
+        swin_embedding_model_epoch_3_batch_800.pt
+            -> (3, 800)
     """
 
-    checkpoint_path = Path(checkpoint_path)             # Normalize to a Path object.
+    name = Path(checkpoint_file).stem
 
-    checkpoint_files = list(                            # List matching checkpoint files.
-        checkpoint_path.parent.glob(                    # Search the parent directory.
-            f"{checkpoint_path.stem}_epoch_*{checkpoint_path.suffix}"   # Match epoch files.
+    if "_epoch_" not in name:
+        return (-1, -1)
+
+    tail = name.split("_epoch_", 1)[1]
+
+    if "_batch_" in tail:
+        epoch_str, batch_str = tail.split("_batch_", 1)
+
+        try:
+            return (int(epoch_str), int(batch_str))
+        except ValueError:
+            return (-1, -1)
+
+    try:
+        return (int(tail), 0)
+    except ValueError:
+        return (-1, -1)
+
+
+def find_latest_checkpoint(checkpoint_path):
+    """
+    Find the most recent completed full-epoch checkpoint.
+
+    Full-epoch checkpoints are preferred over mid-epoch
+    checkpoints so that training resumes cleanly from the
+    last completely finished epoch.
+
+    Returns None if no completed epoch checkpoint exists.
+    """
+
+    checkpoint_path = Path(checkpoint_path)
+
+    # Find only completed full-epoch checkpoints.
+    # These have the format:
+    # swin_embedding_model_epoch_4.pt
+    #
+    # Mid-epoch checkpoints such as:
+    # swin_embedding_model_epoch_5_batch_1000.pt
+    #
+    # are intentionally ignored when a completed epoch
+    # checkpoint is available.
+    checkpoint_files = list(
+        checkpoint_path.parent.glob(
+            f"{checkpoint_path.stem}_epoch_*{checkpoint_path.suffix}"
         )
     )
 
-    if not checkpoint_files:                            # No checkpoints found.
-        return None                                     # Signal "nothing to resume".
+    checkpoint_files = [
+        checkpoint
+        for checkpoint in checkpoint_files
+        if parse_epoch_batch(checkpoint)[1] == 0
+    ]
 
-    checkpoint_files.sort(key=parse_epoch_batch)        # Sort by (epoch, batch).
+    if not checkpoint_files:
+        return None
 
-    return checkpoint_files[-1]                         # Return the newest one.
+    checkpoint_files.sort(key=parse_epoch_batch)
+
+    return checkpoint_files[-1]
 
 
-def save_checkpoint(                                    # Save a training checkpoint.
-    checkpoint_path,                                    # Where to write it.
-    epoch,                                              # Completed epoch number.
-    model,                                              # Model to save.
-    arcface,                                            # ArcFace head to save.
-    optimizer,                                          # Optimizer state to save.
-    average_loss,                                       # Loss value for logging.
-    batch_index=0,                                      # Completed batch within epoch.
+def save_checkpoint(
+    checkpoint_path,
+    epoch,
+    model,
+    arcface,
+    optimizer,
+    average_loss,
+    batch_index=0,
 ):
-    """Save a complete training checkpoint safely."""   # Docstring.
+    """Save a complete training checkpoint."""
 
-    checkpoint_path = Path(checkpoint_path)             # Normalize to a Path object.
+    checkpoint_path = Path(checkpoint_path)
 
-    checkpoint_path.parent.mkdir(                       # Ensure the parent directory...
-        parents=True,                                   # ...creating intermediate dirs...
-        exist_ok=True,                                  # ...without failing if it exists.
+    checkpoint_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
     )
 
-    checkpoint = {                                      # Build the checkpoint dict.
-        "epoch": epoch,                                 # Completed epoch.
-        "batch_index": batch_index,                     # Completed batch within epoch.
-        "model_state_dict": model.state_dict(),         # Model weights.
-        "arcface_state_dict": arcface.state_dict(),     # ArcFace weights.
-        "optimizer_state_dict": optimizer.state_dict(), # Optimizer state.
-        "loss": average_loss,                           # Loss for logging.
+    checkpoint = {
+        "epoch": epoch,
+        "batch_index": batch_index,
+        "model_state_dict": model.state_dict(),
+        "arcface_state_dict": arcface.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "loss": average_loss,
     }
 
     # Write to a temporary file first so a runtime interruption
     # cannot leave the real checkpoint partially written.
-    temp_path = checkpoint_path.with_name(              # Build the temp file path.
-        checkpoint_path.name + ".tmp"                   # Append .tmp to the filename.
+
+    temp_path = checkpoint_path.with_name(
+        checkpoint_path.name + ".tmp"
     )
 
-    with open(temp_path, "wb") as file:                 # Open temp file for binary write.
-        torch.save(checkpoint, file)                    # Serialize the checkpoint.
-        file.flush()                                    # Flush Python buffers.
-        os.fsync(file.fileno())                         # Force OS-level write to disk.
+    with open(temp_path, "wb") as file:
+        torch.save(checkpoint, file)
+        file.flush()
+        os.fsync(file.fileno())
 
-    os.replace(                                         # Atomically move temp -> real file.
-        temp_path,                                      # Source temp path.
-        checkpoint_path,                                # Destination real path.
+    os.replace(
+        temp_path,
+        checkpoint_path,
     )
 
 
-def load_checkpoint(                                    # Load a training checkpoint.
-    checkpoint_path,                                    # File to load.
-    model,                                              # Model to populate.
-    arcface,                                            # ArcFace head to populate.
-    optimizer,                                          # Optimizer to populate.
-    device,                                             # Device to map tensors to.
+def load_checkpoint(
+    checkpoint_path,
+    model,
+    arcface,
+    optimizer,
+    device,
 ):
-    """Load a complete training checkpoint."""          # Docstring.
+    """Load a complete training checkpoint."""
 
-    print(                                              # Announce the load.
-        "Loading checkpoint:",                          # Message prefix.
-        checkpoint_path,                                # File being loaded.
+    print(
+        "Loading checkpoint:",
+        checkpoint_path,
     )
 
-    checkpoint = torch.load(                            # Deserialize the checkpoint.
-        checkpoint_path,                                # File to load.
-        map_location=device,                            # Place tensors on the right device.
-        weights_only=False,                             # Allow non-tensor objects.
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location=device,
+        weights_only=False,
     )
 
-    model.load_state_dict(                              # Restore model weights.
-        checkpoint["model_state_dict"]                  # Stored model state.
+    model.load_state_dict(
+        checkpoint["model_state_dict"]
     )
 
-    arcface.load_state_dict(                            # Restore ArcFace weights.
-        checkpoint["arcface_state_dict"]                # Stored ArcFace state.
+    arcface.load_state_dict(
+        checkpoint["arcface_state_dict"]
     )
 
-    optimizer.load_state_dict(                          # Restore optimizer state.
-        checkpoint["optimizer_state_dict"]              # Stored optimizer state.
+    optimizer.load_state_dict(
+        checkpoint["optimizer_state_dict"]
     )
 
-    completed_epoch = checkpoint["epoch"]               # Read the completed epoch.
-    completed_batch = checkpoint.get("batch_index", 0)  # Read batch, defaulting to 0.
+    completed_epoch = checkpoint["epoch"]
+    completed_batch = checkpoint.get("batch_index", 0)
 
-    print(                                              # Report what was loaded.
-        f"Checkpoint loaded. "                          # Message part 1.
-        f"Training completed through epoch "            # Message part 2.
-        f"{completed_epoch}, batch {completed_batch}."  # Message part 3.
+    print(
+        f"Checkpoint loaded. "
+        f"Training completed through epoch "
+        f"{completed_epoch}, batch {completed_batch}."
     )
 
-    return completed_epoch, completed_batch             # Return both for the resume logic.
+    return completed_epoch, completed_batch
 
 
-def train_model(                                        # Main training entry point.
-    train_metadata,                                     # Training rows.
-    dataset_path,                                       # Dataset root directory.
-    identity_to_label,                                  # Identity-to-label mapping.
-    resume=False,                                       # Whether to resume from checkpoint.
+def train_model(
+    train_metadata,
+    dataset_path,
+    identity_to_label,
+    resume=False,
 ):
     """
-    Train the Swin embedding model using ArcFace.       # Docstring.
+    Train the Swin embedding model using ArcFace.
 
-    Supports saving and resuming complete training      # Docstring.
-    checkpoints, including mid-epoch checkpoints.       # Docstring.
+    Supports saving and resuming complete training
+    checkpoints, including mid-epoch checkpoints.
     """
 
-    settings = Settings.from_environment()              # Load settings from env vars.
+    settings = Settings.from_environment()
 
-    device = torch.device(settings.device)              # Resolve the compute device.
+    device = torch.device(settings.device)
 
-    print("Training device:", device)                   # Report the device.
-    print(                                              # Report identity count.
-        "Training identities:",                         # Message prefix.
-        len(identity_to_label),                         # Number of unique identities.
+    print("Training device:", device)
+
+    print(
+        "Training identities:",
+        len(identity_to_label),
     )
 
-    image_processor = AutoImageProcessor.from_pretrained(   # Load the image processor.
-        settings.model_name                             # Backbone name from settings.
+    image_processor = AutoImageProcessor.from_pretrained(
+        settings.model_name
     )
 
-    train_dataset, train_loader = create_train_loader(  # Build dataset and dataloader.
-        train_metadata=train_metadata,                  # Training rows.
-        dataset_path=dataset_path,                      # Dataset root.
-        image_processor=image_processor,                # Image preprocessing.
-        identity_to_label=identity_to_label,            # Label mapping.
-        batch_size=settings.batch_size,                 # Batch size.
-        num_workers=settings.num_workers,               # Dataloader worker count.
+    train_dataset, train_loader = create_train_loader(
+        train_metadata=train_metadata,
+        dataset_path=dataset_path,
+        image_processor=image_processor,
+        identity_to_label=identity_to_label,
+        batch_size=settings.batch_size,
+        num_workers=settings.num_workers,
     )
 
-    print(                                              # Report dataset size.
-        "Training images:",                             # Message prefix.
-        len(train_dataset),                             # Number of training images.
+    print(
+        "Training images:",
+        len(train_dataset),
     )
 
-    print(                                              # Report batch count.
-        "Training batches:",                            # Message prefix.
-        len(train_loader),                              # Number of batches per epoch.
+    print(
+        "Training batches:",
+        len(train_loader),
     )
 
-    model = SwinEmbeddingModel(                         # Build the Swin embedding model.
-        model_name=settings.model_name,                 # Backbone name.
-        embedding_dimension=settings.embedding_dimension,   # Output embedding size.
-        pretrained=True,                                # Start from pretrained weights.
+    model = SwinEmbeddingModel(
+        model_name=settings.model_name,
+        embedding_dimension=settings.embedding_dimension,
+        pretrained=True,
     )
 
-    model = model.to(device)                            # Move model to the device.
+    model = model.to(device)
 
-    sample_images, sample_labels = next(                # Grab one batch for a sanity check.
-        iter(train_loader)                              # Iterate the dataloader once.
+    sample_images, sample_labels = next(
+        iter(train_loader)
     )
 
-    sample_images = sample_images.to(device)            # Move sample images to device.
+    sample_images = sample_images.to(device)
 
-    model.eval()                                        # Set model to eval for the check.
+    model.eval()
 
-    with torch.no_grad():                               # Disable grad for the check.
-        sample_embeddings = model(sample_images)        # Compute sample embeddings.
+    with torch.no_grad():
+        sample_embeddings = model(sample_images)
 
-    print(                                              # Report embedding shape.
-        "Embedding shape:",                             # Message prefix.
-        sample_embeddings.shape,                        # Actual shape.
+    print(
+        "Embedding shape:",
+        sample_embeddings.shape,
     )
 
-    expected_shape = (                                  # Compute expected shape.
-        sample_images.shape[0],                         # Batch size.
-        settings.embedding_dimension,                   # Embedding dimension.
+    expected_shape = (
+        sample_images.shape[0],
+        settings.embedding_dimension,
     )
 
-    if sample_embeddings.shape != expected_shape:       # Validate embedding shape.
-        raise RuntimeError(                             # Raise if mismatch.
-            "Unexpected embedding dimensions. "         # Message part 1.
-            f"Expected {expected_shape}, "              # Message part 2.
-            f"received {tuple(sample_embeddings.shape)}."   # Message part 3.
+    if sample_embeddings.shape != expected_shape:
+        raise RuntimeError(
+            "Unexpected embedding dimensions. "
+            f"Expected {expected_shape}, "
+            f"received {tuple(sample_embeddings.shape)}."
         )
 
-    num_identities = len(identity_to_label)             # Number of output classes.
+    num_identities = len(identity_to_label)
 
-    arcface = ArcFace(                                  # Build the ArcFace head.
-        embedding_dimension=settings.embedding_dimension,   # Input embedding size.
-        num_classes=num_identities,                     # Number of identities.
-        scale=settings.arcface_scale,                   # ArcFace scale.
-        margin=settings.arcface_margin,                 # ArcFace margin.
+    arcface = ArcFace(
+        embedding_dimension=settings.embedding_dimension,
+        num_classes=num_identities,
+        scale=settings.arcface_scale,
+        margin=settings.arcface_margin,
     )
 
-    arcface = arcface.to(device)                        # Move ArcFace to the device.
+    arcface = arcface.to(device)
 
-    criterion = nn.CrossEntropyLoss()                   # Loss function.
+    criterion = nn.CrossEntropyLoss()
 
-    optimizer = torch.optim.AdamW(                      # AdamW optimizer.
-        list(model.parameters())                        # Model parameters.
-        + list(arcface.parameters()),                   # ArcFace parameters.
-        lr=settings.learning_rate,                      # Learning rate.
-        weight_decay=settings.weight_decay,             # Weight decay.
+    optimizer = torch.optim.AdamW(
+        list(model.parameters())
+        + list(arcface.parameters()),
+        lr=settings.learning_rate,
+        weight_decay=settings.weight_decay,
     )
 
-    checkpoint_path = Path(                             # Resolve the base checkpoint path.
-        settings.checkpoint_path                         # From settings.
+    checkpoint_path = Path(
+        settings.checkpoint_path
     )
 
-    checkpoint_path.parent.mkdir(                       # Ensure checkpoint dir exists.
-        parents=True,                                   # Create intermediate dirs.
-        exist_ok=True,                                  # Do not fail if it exists.
+    checkpoint_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
     )
 
     # ── mid-epoch checkpoint configuration ──
@@ -352,329 +379,315 @@ def train_model(                                        # Main training entry po
     # At ~1718 batches per epoch, 200 batches is roughly
     # 11-12% of an epoch, or ~25 minutes at current speed.
 
-    SAVE_EVERY_N_BATCHES = 200                          # Mid-epoch save interval.
+    SAVE_EVERY_N_BATCHES = 200
 
     # If True, keep every mid-epoch checkpoint forever.
     # If False, delete a completed epoch's mid-epoch
     # checkpoints after the full-epoch checkpoint is written.
-    KEEP_MID_EPOCH_FILES = False                        # Cleanup flag.
 
-    start_epoch = 0                                     # Epoch to start from.
-    start_batch = 0                                     # Batch to start from within that epoch.
+    KEEP_MID_EPOCH_FILES = False
 
-    if resume:                                          # Only attempt resume if requested.
+    start_epoch = 0
+    start_batch = 0
 
-        latest_checkpoint = find_latest_checkpoint(     # Locate the newest checkpoint.
-            checkpoint_path                             # Base checkpoint path.
+    if resume:
+        latest_checkpoint = find_latest_checkpoint(
+            checkpoint_path
         )
 
-        if latest_checkpoint is None:                   # No checkpoint found.
-
-            print(                                      # Inform the user.
-                "Resume requested, but no epoch checkpoint "   # Message part 1.
-                "was found."                            # Message part 2.
+        if latest_checkpoint is None:
+            print(
+                "Resume requested, but no completed epoch checkpoint "
+                "was found."
             )
 
-            print(                                      # Inform the user.
-                "Starting training from the beginning." # Message.
+            print(
+                "Starting training from the beginning."
             )
 
-        else:                                           # Checkpoint found.
-
-            start_epoch, start_batch = load_checkpoint( # Load it.
-                checkpoint_path=latest_checkpoint,      # File to load.
-                model=model,                            # Model to populate.
-                arcface=arcface,                        # ArcFace to populate.
-                optimizer=optimizer,                    # Optimizer to populate.
-                device=device,                          # Device for tensors.
+        else:
+            start_epoch, start_batch = load_checkpoint(
+                checkpoint_path=latest_checkpoint,
+                model=model,
+                arcface=arcface,
+                optimizer=optimizer,
+                device=device,
             )
 
-    # Checkpoint epochs are 1-indexed (they store epoch + 1).
-    # The training loop is 0-indexed. If we loaded a mid-epoch
-    # checkpoint, the loop should re-enter the SAME epoch index
-    # and skip the first `start_batch` batches. If we loaded a
-    # full-epoch checkpoint (batch_index == 0), the loop moves
-    # to the next epoch.
-    if start_batch > 0:                                 # Mid-epoch checkpoint case.
-        resume_epoch_index = start_epoch - 1            # Re-enter the same epoch.
-    else:                                               # Full-epoch checkpoint case.
-        resume_epoch_index = start_epoch                # Move to the next epoch.
+    # Completed epoch checkpoints are 1-indexed.
+    # The training loop is 0-indexed.
+    #
+    # Because we now resume from completed full-epoch
+    # checkpoints, the next epoch is always start_epoch.
 
-    if resume_epoch_index >= settings.num_epochs:       # Training already finished.
+    resume_epoch_index = start_epoch
 
-        print()                                         # Blank line.
-        print(                                          # Report completion.
-            "Training is already complete."             # Message.
+    if resume_epoch_index >= settings.num_epochs:
+        print()
+        print(
+            "Training is already complete."
         )
 
-        print(                                          # Report completed epochs.
-            f"Completed epochs: {start_epoch}"          # Message.
+        print(
+            f"Completed epochs: {start_epoch}"
         )
 
-        return model                                    # Nothing left to do.
+        return model
 
-    print()                                             # Blank line.
-    print(                                              # Report starting epoch.
-        f"Starting training from epoch "                # Message part 1.
-        f"{resume_epoch_index + 1}."                    # Message part 2.
+    print()
+
+    print(
+        f"Starting training from epoch "
+        f"{resume_epoch_index + 1}."
     )
 
-    print(                                              # Report total epochs.
-        f"Total epochs: {settings.num_epochs}"          # Message.
+    print(
+        f"Total epochs: {settings.num_epochs}"
     )
 
-    if start_batch > 0:                                 # Report batch resume.
-        print(                                          # Message.
-            f"Resuming at batch {start_batch + 1} "     # Message part 1.
-            f"of that epoch."                           # Message part 2.
-        )
+    print()
 
-    print()                                             # Blank line.
+    average_loss = 0.0
 
-    average_loss = 0.0                                  # Placeholder for final loss.
-
-    for epoch in range(                                 # Iterate epochs from the resume point.
-        resume_epoch_index,                             # Start index.
-        settings.num_epochs,                            # End (exclusive).
+    for epoch in range(
+        resume_epoch_index,
+        settings.num_epochs,
     ):
 
-        model.train()                                   # Set model to training mode.
-        arcface.train()                                 # Set ArcFace to training mode.
+        model.train()
+        arcface.train()
 
-        running_loss = 0.0                              # Accumulator for batch losses.
-        batches_seen = 0                                # Counter of batches processed.
+        running_loss = 0.0
+        batches_seen = 0
 
-        # On the very first epoch after resume, skip the
-        # batches that were already completed in the
-        # mid-epoch checkpoint we loaded.
-        skip_batches = (                                # Batches to skip this epoch.
-            start_batch                                 # Skip count from checkpoint...
-            if epoch == resume_epoch_index              # ...only on the resumed epoch...
-            else 0                                      # ...otherwise skip nothing.
-        )
-
-        for batch_index, (                              # Iterate batches in this epoch.
-            images,                                     # Image tensor.
-            labels,                                     # Label tensor.
+        for batch_index, (
+            images,
+            labels,
         ) in enumerate(train_loader):
 
-            if batch_index < skip_batches:              # Skip already-completed batches.
-                continue                                # Move on to the next batch.
-
-            images = images.to(                         # Move images to device.
-                device,                                 # Target device.
-                non_blocking=True,                      # Async host->device copy.
+            images = images.to(
+                device,
+                non_blocking=True,
             )
 
-            labels = labels.to(                         # Move labels to device.
-                device,                                 # Target device.
-                non_blocking=True,                      # Async host->device copy.
+            labels = labels.to(
+                device,
+                non_blocking=True,
             )
 
-            optimizer.zero_grad()                       # Clear gradients.
+            optimizer.zero_grad()
 
-            embeddings = model(images)                  # Forward pass through the backbone.
+            embeddings = model(images)
 
-            logits = arcface(                           # Forward pass through ArcFace.
-                embeddings,                             # Embeddings.
-                labels,                                 # Labels for margin application.
+            logits = arcface(
+                embeddings,
+                labels,
             )
 
-            loss = criterion(                           # Compute the loss.
-                logits,                                 # Predicted logits.
-                labels,                                 # Ground-truth labels.
+            loss = criterion(
+                logits,
+                labels,
             )
 
-            loss.backward()                             # Backpropagate gradients.
+            loss.backward()
 
-            optimizer.step()                            # Update parameters.
+            optimizer.step()
 
-            running_loss += loss.item()                 # Accumulate scalar loss.
-            batches_seen += 1                           # Increment batch counter.
+            running_loss += loss.item()
+            batches_seen += 1
 
-            if (                                        # Periodic log message.
-                batch_index + 1                         # Number of batches processed.
-            ) % 100 == 0:                               # Every 100 batches.
+            if (
+                batch_index + 1
+            ) % 100 == 0:
 
-                print(                                  # Print progress.
-                    f"Epoch [{epoch + 1}/"              # Epoch part.
-                    f"{settings.num_epochs}] "          # Total epochs.
-                    f"Batch [{batch_index + 1}/"        # Batch part.
-                    f"{len(train_loader)}] "            # Total batches.
-                    f"Loss: {loss.item():.4f}"          # Current loss.
+                print(
+                    f"Epoch [{epoch + 1}/"
+                    f"{settings.num_epochs}] "
+                    f"Batch [{batch_index + 1}/"
+                    f"{len(train_loader)}] "
+                    f"Loss: {loss.item():.4f}",
+                    flush=True,
                 )
 
             # ── mid-epoch checkpoint ──
-            if (                                        # Check save interval.
-                batch_index + 1                         # Batches processed.
-            ) % SAVE_EVERY_N_BATCHES == 0:              # Every N batches.
 
-                partial_loss = (                        # Average loss so far this epoch.
-                    running_loss                        # Total loss.
-                    / max(batches_seen, 1)              # Divide by batches seen.
+            if (
+                batch_index + 1
+            ) % SAVE_EVERY_N_BATCHES == 0:
+
+                partial_loss = (
+                    running_loss
+                    / max(batches_seen, 1)
                 )
 
-                mid_checkpoint_path = (                 # Build the mid-epoch filename.
-                    checkpoint_path.with_name(          # Based on the base checkpoint path.
-                        f"{checkpoint_path.stem}"       # Base stem.
-                        f"_epoch_{epoch + 1}"           # Epoch suffix.
-                        f"_batch_{batch_index + 1}"     # Batch suffix.
-                        f"{checkpoint_path.suffix}"     # Extension.
+                mid_checkpoint_path = (
+                    checkpoint_path.with_name(
+                        f"{checkpoint_path.stem}"
+                        f"_epoch_{epoch + 1}"
+                        f"_batch_{batch_index + 1}"
+                        f"{checkpoint_path.suffix}"
                     )
                 )
 
-                save_checkpoint(                        # Write the mid-epoch checkpoint.
-                    checkpoint_path=mid_checkpoint_path,   # Destination path.
-                    epoch=epoch + 1,                    # 1-indexed epoch.
-                    batch_index=batch_index + 1,        # 1-indexed batch.
-                    model=model,                        # Model to save.
-                    arcface=arcface,                    # ArcFace to save.
-                    optimizer=optimizer,                # Optimizer to save.
-                    average_loss=partial_loss,          # Loss for logging.
+                save_checkpoint(
+                    checkpoint_path=mid_checkpoint_path,
+                    epoch=epoch + 1,
+                    batch_index=batch_index + 1,
+                    model=model,
+                    arcface=arcface,
+                    optimizer=optimizer,
+                    average_loss=partial_loss,
                 )
 
-                print(                                  # Announce the save.
-                    "Mid-epoch checkpoint saved:",      # Message prefix.
-                    mid_checkpoint_path.name,           # Filename.
+                print(
+                    "Mid-epoch checkpoint saved:",
+                    mid_checkpoint_path.name,
+                    flush=True,
                 )
 
-        average_loss = (                                # Average loss for the epoch.
-            running_loss                                # Total accumulated loss.
-            / max(batches_seen, 1)                      # Divide by batches seen.
+        average_loss = (
+            running_loss
+            / max(batches_seen, 1)
         )
 
-        print()                                         # Blank line.
-        print(                                          # Report epoch completion.
-            f"Epoch {epoch + 1} complete. "             # Message part 1.
-            f"Average loss: {average_loss:.4f}"         # Message part 2.
+        print()
+
+        print(
+            f"Epoch {epoch + 1} complete. "
+            f"Average loss: {average_loss:.4f}",
+            flush=True,
         )
 
-        epoch_checkpoint_path = (                       # Build the full-epoch filename.
-            checkpoint_path.with_name(                  # Based on the base path.
-                f"{checkpoint_path.stem}"               # Base stem.
-                f"_epoch_{epoch + 1}"                   # Epoch suffix.
-                f"{checkpoint_path.suffix}"             # Extension.
+        epoch_checkpoint_path = (
+            checkpoint_path.with_name(
+                f"{checkpoint_path.stem}"
+                f"_epoch_{epoch + 1}"
+                f"{checkpoint_path.suffix}"
             )
         )
 
-        save_checkpoint(                                # Write the full-epoch checkpoint.
-            checkpoint_path=epoch_checkpoint_path,      # Destination path.
-            epoch=epoch + 1,                            # 1-indexed epoch.
-            batch_index=0,                              # No batch offset.
-            model=model,                                # Model to save.
-            arcface=arcface,                            # ArcFace to save.
-            optimizer=optimizer,                        # Optimizer to save.
-            average_loss=average_loss,                  # Loss for logging.
+        save_checkpoint(
+            checkpoint_path=epoch_checkpoint_path,
+            epoch=epoch + 1,
+            batch_index=0,
+            model=model,
+            arcface=arcface,
+            optimizer=optimizer,
+            average_loss=average_loss,
         )
 
-        print(                                          # Announce the save.
-            "Epoch checkpoint saved to:",               # Message prefix.
-            epoch_checkpoint_path,                      # Path.
+        print(
+            "Epoch checkpoint saved to:",
+            epoch_checkpoint_path,
+            flush=True,
         )
 
         # ── optional cleanup of mid-epoch files ──
-        if not KEEP_MID_EPOCH_FILES:                    # Only if cleanup enabled.
 
-            for old_checkpoint in (                     # Iterate matching files.
-                checkpoint_path.parent.glob(            # Search the checkpoint dir.
-                    f"{checkpoint_path.stem}"           # Base stem.
-                    f"_epoch_{epoch + 1}"               # This epoch.
-                    f"_batch_*"                         # Any batch.
-                    f"{checkpoint_path.suffix}"         # Extension.
+        if not KEEP_MID_EPOCH_FILES:
+
+            for old_checkpoint in (
+                checkpoint_path.parent.glob(
+                    f"{checkpoint_path.stem}"
+                    f"_epoch_{epoch + 1}"
+                    f"_batch_*"
+                    f"{checkpoint_path.suffix}"
                 )
             ):
-                try:                                    # Attempt to delete.
-                    old_checkpoint.unlink()             # Remove the file.
-                except OSError:                         # Ignore missing-file races.
-                    pass                                # Continue silently.
 
-        print()                                         # Blank line.
+                try:
+                    old_checkpoint.unlink()
+                except OSError:
+                    pass
 
-    save_checkpoint(                                    # Save the final consolidated checkpoint.
-        checkpoint_path=checkpoint_path,                # Base checkpoint path.
-        epoch=settings.num_epochs,                      # Final epoch number.
-        batch_index=0,                                  # No batch offset.
-        model=model,                                    # Model to save.
-        arcface=arcface,                                # ArcFace to save.
-        optimizer=optimizer,                            # Optimizer to save.
-        average_loss=average_loss,                      # Final loss.
+        print()
+
+    save_checkpoint(
+        checkpoint_path=checkpoint_path,
+        epoch=settings.num_epochs,
+        batch_index=0,
+        model=model,
+        arcface=arcface,
+        optimizer=optimizer,
+        average_loss=average_loss,
     )
 
-    print()                                             # Blank line.
-    print(                                              # Announce completion.
-        "Training complete."                            # Message.
+    print()
+
+    print(
+        "Training complete."
     )
 
-    print(                                              # Report final checkpoint.
-        "Final checkpoint saved to:",                   # Message prefix.
-        checkpoint_path,                                # Path.
+    print(
+        "Final checkpoint saved to:",
+        checkpoint_path,
     )
 
-    return model                                        # Return the trained model.
+    return model
 
 
-def main():                                             # Command-line entry point.
+def main():
 
-    parser = argparse.ArgumentParser(                   # Create the arg parser.
-        description=(                                   # Help text.
-            "Train the wildlife "                       # Message part 1.
-            "re-identification model"                   # Message part 2.
+    parser = argparse.ArgumentParser(
+        description=(
+            "Train the wildlife "
+            "re-identification model"
         )
     )
 
-    parser.add_argument(                                # Define --dataset-path.
-        "--dataset-path",                               # Flag name.
-        required=True,                                  # Must be provided.
-        help=(                                          # Help text.
-            "Root directory of WildlifeReID-10k "       # Message part 1.
-            "containing metadata.csv"                   # Message part 2.
+    parser.add_argument(
+        "--dataset-path",
+        required=True,
+        help=(
+            "Root directory of WildlifeReID-10k "
+            "containing metadata.csv"
         ),
     )
 
-    parser.add_argument(                                # Define --resume.
-        "--resume",                                     # Flag name.
-        action="store_true",                            # Boolean flag.
-        help=(                                          # Help text.
-            "Resume training from the latest "          # Message part 1.
-            "epoch or mid-epoch checkpoint."            # Message part 2.
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume training from the latest "
+            "completed epoch checkpoint."
         ),
     )
 
-    args = parser.parse_args()                          # Parse CLI arguments.
+    args = parser.parse_args()
 
-    dataset_path = Path(                                # Normalize dataset path.
-        args.dataset_path                               # From CLI.
+    dataset_path = Path(
+        args.dataset_path
     )
 
-    metadata = load_dataset_metadata(                   # Load all metadata rows.
-        dataset_path                                    # Dataset root.
+    metadata = load_dataset_metadata(
+        dataset_path
     )
 
-    train_metadata = create_training_metadata(          # Filter to training rows.
-        metadata                                        # All rows.
+    train_metadata = create_training_metadata(
+        metadata
     )
 
-    identity_to_label = create_identity_mapping(        # Build identity-to-label map.
-        train_metadata                                  # Training rows.
+    identity_to_label = create_identity_mapping(
+        train_metadata
     )
 
-    print(                                              # Report training image count.
-        "Training images:",                             # Message prefix.
-        len(train_metadata),                            # Count.
+    print(
+        "Training images:",
+        len(train_metadata),
     )
 
-    print(                                              # Report training identity count.
-        "Training identities:",                         # Message prefix.
-        len(identity_to_label),                         # Count.
+    print(
+        "Training identities:",
+        len(identity_to_label),
     )
 
-    train_model(                                        # Run training.
-        train_metadata=train_metadata,                  # Training rows.
-        dataset_path=dataset_path,                      # Dataset root.
-        identity_to_label=identity_to_label,            # Label mapping.
-        resume=args.resume,                             # Resume flag.
+    train_model(
+        train_metadata=train_metadata,
+        dataset_path=dataset_path,
+        identity_to_label=identity_to_label,
+        resume=args.resume,
     )
 
 
-if __name__ == "__main__":                              # Only run when executed directly.
-    main()                                              # Invoke the entry point.
+if __name__ == "__main__":
+    main()

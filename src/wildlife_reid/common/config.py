@@ -31,7 +31,8 @@ class Settings:
     weight_decay: float = 1e-4
 
     # Number of complete passes through the training dataset.
-    num_epochs: int = 5
+    # Colab can override this with WILDLIFE_NUM_EPOCHS.
+    num_epochs: int = 50
 
     # ArcFace parameters.
     arcface_scale: float = 64.0
