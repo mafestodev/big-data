@@ -8,10 +8,8 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoImageProcessor
 
 from wildlife_reid.common.config import Settings
-from wildlife_reid.training.model import SwinEmbeddingModel
 
 
 class EmbeddingDataset(Dataset):
@@ -52,8 +50,8 @@ class EmbeddingDataset(Dataset):
         return pixel_values, row["identity"]
 
 
-def load_metadata(metadata_path):
-    """Load metadata containing image paths and identity labels."""
+def load_metadata(metadata_path, split="train"):
+    """Load image metadata, optionally retaining one official dataset split."""
 
     metadata_path = Path(metadata_path)
 
@@ -73,19 +71,53 @@ def load_metadata(metadata_path):
 
         required_columns = {"path", "identity"}
 
+        if split is not None:
+            required_columns.add("split")
+
         if not required_columns.issubset(fieldnames):
+            missing = sorted(required_columns.difference(fieldnames))
             raise ValueError(
-                "Metadata must contain 'path' and 'identity' columns."
+                "Metadata is missing required columns: "
+                + ", ".join(missing)
             )
 
         metadata = list(reader)
 
+    if split is not None:
+        metadata = [
+            row
+            for row in metadata
+            if row["split"] == split
+        ]
+
     if not metadata:
         raise ValueError(
-            "Metadata file contains no records."
+            "Metadata contains no records"
+            + (f" for split='{split}'." if split is not None else ".")
         )
 
     return metadata
+
+
+def extract_model_state_dict(checkpoint):
+    """Support both complete training checkpoints and model-only artifacts."""
+
+    if not isinstance(checkpoint, dict):
+        raise ValueError(
+            "Checkpoint must be a dictionary containing model weights."
+        )
+
+    if "model_state_dict" in checkpoint:
+        model_state_dict = checkpoint["model_state_dict"]
+    else:
+        model_state_dict = checkpoint
+
+    if not isinstance(model_state_dict, dict) or not model_state_dict:
+        raise ValueError(
+            "Checkpoint does not contain a valid model_state_dict."
+        )
+
+    return model_state_dict
 
 
 def generate_embeddings(
@@ -94,17 +126,26 @@ def generate_embeddings(
     dataset_path,
     output_path,
     batch_size,
+    metadata_split="train",
 ):
     """Generate embeddings from a trained checkpoint."""
 
-    settings = Settings()
+    from transformers import AutoImageProcessor
+
+    from wildlife_reid.training.model import SwinEmbeddingModel
+
+    settings = Settings.from_environment()
 
     device = torch.device(settings.device)
 
     print("Embedding device:", device)
 
-    metadata = load_metadata(metadata_path)
+    metadata = load_metadata(
+        metadata_path,
+        split=metadata_split,
+    )
 
+    print("Metadata split:", metadata_split or "all")
     print("Images:", len(metadata))
 
     image_processor = AutoImageProcessor.from_pretrained(
@@ -122,7 +163,7 @@ def generate_embeddings(
         batch_size=batch_size,
         shuffle=False,
         num_workers=settings.num_workers,
-        pin_memory=torch.cuda.is_available(),
+        pin_memory=device.type == "cuda",
     )
 
     model = SwinEmbeddingModel(
@@ -140,12 +181,14 @@ def generate_embeddings(
 
     print("Loading checkpoint:", checkpoint_path)
 
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location=device,
+        weights_only=True,
+    )
+
     model.load_state_dict(
-        torch.load(
-            checkpoint_path,
-            map_location=device,
-            weights_only=True,
-        )
+        extract_model_state_dict(checkpoint)
     )
 
     model = model.to(device)
@@ -156,7 +199,7 @@ def generate_embeddings(
 
     print("Generating embeddings...")
 
-    with torch.no_grad():
+    with torch.inference_mode():
         for batch_index, (images, batch_identities) in enumerate(
             loader
         ):
@@ -199,6 +242,25 @@ def generate_embeddings(
             f"received {embeddings.shape[1]}-D embeddings."
         )
 
+    if not np.isfinite(embeddings).all():
+        raise RuntimeError(
+            "Generated embeddings contain NaN or infinite values."
+        )
+
+    embedding_norms = np.linalg.norm(
+        embeddings,
+        axis=1,
+    )
+
+    if not np.allclose(
+        embedding_norms,
+        1.0,
+        atol=1e-4,
+    ):
+        raise RuntimeError(
+            "Generated embeddings are not L2-normalized."
+        )
+
     output_path = Path(output_path)
 
     output_path.parent.mkdir(
@@ -227,6 +289,7 @@ def build_gallery(
     dataset_path,
     output_path,
     batch_size,
+    metadata_split="train",
 ):
     """Build a reference gallery of embeddings."""
 
@@ -238,6 +301,7 @@ def build_gallery(
         dataset_path=dataset_path,
         output_path=output_path,
         batch_size=batch_size,
+        metadata_split=metadata_split,
     )
 
 
@@ -277,7 +341,18 @@ def main():
         help="Embedding batch size",
     )
 
+    parser.add_argument(
+        "--split",
+        default="train",
+        help=(
+            "Metadata split to embed (default: train). "
+            "Use 'all' only with an already prepared gallery CSV."
+        ),
+    )
+
     args = parser.parse_args()
+
+    metadata_split = None if args.split.lower() == "all" else args.split
 
     generate_embeddings(
         checkpoint_path=args.checkpoint,
@@ -285,6 +360,7 @@ def main():
         dataset_path=args.dataset_path,
         output_path=args.output,
         batch_size=args.batch_size,
+        metadata_split=metadata_split,
     )
 
 
