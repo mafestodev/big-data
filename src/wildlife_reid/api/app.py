@@ -27,6 +27,7 @@ def create_app(settings: Settings | None = None, identifier: Identifier | None =
     @app.get("/health")
     def health():
         ready = app.extensions["wildlife_identifier"] is not None
+
         return jsonify({"status": "ok", "model_ready": ready})
 
     @app.get("/model-info")
@@ -48,6 +49,7 @@ def create_app(settings: Settings | None = None, identifier: Identifier | None =
         uploaded = request.files.get("image")
         if uploaded is None:
             return jsonify({"error": "Provide an image using the 'image' form field"}), 400
+
         try:
             image = decode_rgb_image(uploaded.read())
         except InvalidImageError as exc:
@@ -56,10 +58,12 @@ def create_app(settings: Settings | None = None, identifier: Identifier | None =
         started = time.perf_counter()
         result = service.identify(image)
         elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+
         return jsonify(
             {
                 "predicted_identity": result.identity,
                 "similarity_score": round(result.similarity, 6),
+                "matched_image_path": result.matched_image_path,
                 "processing_time_ms": elapsed_ms,
             }
         )

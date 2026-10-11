@@ -10,6 +10,7 @@ from wildlife_reid.api.app import create_app
 class FakeResult:
     identity: str = "animal-00482"
     similarity: float = 0.87
+    matched_image_path: str = "animals/animal-00482.jpg"
 
 
 class FakeIdentifier:
@@ -47,6 +48,7 @@ def test_identify_returns_prediction():
     assert response.status_code == 200
     assert body["predicted_identity"] == "animal-00482"
     assert body["similarity_score"] == 0.87
+    assert body["matched_image_path"] == "animals/animal-00482.jpg"
     assert body["processing_time_ms"] >= 0
 
 

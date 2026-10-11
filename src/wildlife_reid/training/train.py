@@ -7,12 +7,12 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from transformers import AutoImageProcessor
 
 from wildlife_reid.common.config import Settings
 from wildlife_reid.training.arcface import ArcFace
 from wildlife_reid.training.dataset import create_train_loader
 from wildlife_reid.training.model import SwinEmbeddingModel
+from wildlife_reid.training.preprocessing import create_image_processor
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -283,7 +283,7 @@ def train_model(
         len(identity_to_label),
     )
 
-    image_processor = AutoImageProcessor.from_pretrained(
+    image_processor = create_image_processor(
         settings.model_name
     )
 

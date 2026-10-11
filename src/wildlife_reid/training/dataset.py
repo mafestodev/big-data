@@ -5,6 +5,8 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
+from wildlife_reid.training.preprocessing import preprocess_image
+
 
 def create_train_augmentation():
     """
@@ -66,13 +68,11 @@ class WildlifeReIDDataset(Dataset):
             image = self.augmentation(image)
 
         # Apply the preprocessing expected by Swin.
-        processed = self.image_processor(
-            images=image,
-            return_tensors="pt"
+        pixel_values = preprocess_image(
+            self.image_processor,
+            image,
         )
 
-        # Remove the temporary batch dimension.
-        pixel_values = processed["pixel_values"].squeeze(0)
 
         # Convert the wildlife identity into its numerical training label.
         label = self.identity_to_label[row["identity"]]

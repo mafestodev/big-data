@@ -10,6 +10,10 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
 from wildlife_reid.common.config import Settings
+from wildlife_reid.training.preprocessing import (
+    create_image_processor,
+    preprocess_image,
+)
 
 
 class EmbeddingDataset(Dataset):
@@ -40,14 +44,16 @@ class EmbeddingDataset(Dataset):
 
         image = Image.open(image_path).convert("RGB")
 
-        processed = self.image_processor(
-            images=image,
-            return_tensors="pt",
+        pixel_values = preprocess_image(
+            self.image_processor,
+            image,
         )
 
-        pixel_values = processed["pixel_values"].squeeze(0)
-
-        return pixel_values, row["identity"]
+        return (
+            pixel_values,
+            row["identity"],
+            row["path"],
+        )
 
 
 def load_metadata(metadata_path, split="train"):
@@ -120,17 +126,11 @@ def extract_model_state_dict(checkpoint):
     return model_state_dict
 
 
-def generate_embeddings(
-    checkpoint_path,
-    metadata_path,
-    dataset_path,
-    output_path,
+def generate_embeddings(checkpoint_path, metadata_path, dataset_path, output_path,
     batch_size,
     metadata_split="train",
 ):
     """Generate embeddings from a trained checkpoint."""
-
-    from transformers import AutoImageProcessor
 
     from wildlife_reid.training.model import SwinEmbeddingModel
 
@@ -148,7 +148,7 @@ def generate_embeddings(
     print("Metadata split:", metadata_split or "all")
     print("Images:", len(metadata))
 
-    image_processor = AutoImageProcessor.from_pretrained(
+    image_processor = create_image_processor(
         settings.model_name
     )
 
@@ -196,13 +196,16 @@ def generate_embeddings(
 
     embeddings = []
     identities = []
+    image_paths = []
 
     print("Generating embeddings...")
 
     with torch.inference_mode():
-        for batch_index, (images, batch_identities) in enumerate(
-            loader
-        ):
+        for batch_index, (
+            images,
+            batch_identities,
+            batch_image_paths,
+        ) in enumerate(loader):
             images = images.to(
                 device,
                 non_blocking=True,
@@ -215,6 +218,7 @@ def generate_embeddings(
             )
 
             identities.extend(batch_identities)
+            image_paths.extend(batch_image_paths)
 
             if (batch_index + 1) % 100 == 0:
                 print(
@@ -231,9 +235,19 @@ def generate_embeddings(
         dtype=str,
     )
 
+    image_paths = np.asarray(
+        image_paths,
+        dtype=str,
+    )
+
     if len(embeddings) != len(identities):
         raise RuntimeError(
             "Number of embeddings does not match number of identities."
+        )
+
+    if len(embeddings) != len(image_paths):
+        raise RuntimeError(
+            "Number of embeddings does not match number of image paths."
         )
 
     if embeddings.shape[1] != settings.embedding_dimension:
@@ -272,12 +286,14 @@ def generate_embeddings(
         output_path,
         embeddings=embeddings,
         identities=identities,
+        image_paths=image_paths,
     )
 
     print()
     print("Embedding generation complete.")
     print("Embedding shape:", embeddings.shape)
     print("Identity labels:", len(identities))
+    print("Image paths:", len(image_paths))
     print("Saved to:", output_path)
 
     return embeddings, identities

@@ -10,13 +10,17 @@ from PIL import Image
 from wildlife_reid.common.config import Settings
 from wildlife_reid.gallery.vector_search import ExactCosineIndex
 from wildlife_reid.training.model import SwinEmbeddingModel
-from wildlife_reid.training.transforms import inference_transforms
+from wildlife_reid.training.preprocessing import (
+    create_image_processor,
+    preprocess_image,
+)
 
 
 @dataclass(frozen=True)
 class Identification:
     identity: str
     similarity: float
+    matched_image_path: str
 
 
 class InferenceService:
@@ -29,7 +33,9 @@ class InferenceService:
         self.model = model.to(settings.device).eval()
         self.index = index
         self.settings = settings
-        self.transform = inference_transforms(settings.image_size)
+        self.image_processor = create_image_processor(
+            settings.model_name
+        )
 
     @classmethod
     def load(cls, settings: Settings) -> "InferenceService":
@@ -43,16 +49,38 @@ class InferenceService:
             embedding_dimension=settings.embedding_dimension,
             pretrained=False,
         )
-        checkpoint = torch.load(
-            Path(settings.checkpoint_path), map_location=settings.device, weights_only=True
+        checkpoint = torch.load(Path(settings.checkpoint_path), map_location=settings.device, weights_only=True)
+
+        model_state_dict = checkpoint.get(
+            "model_state_dict",
+            checkpoint,
         )
-        model.load_state_dict(checkpoint)
+
+        model.load_state_dict(model_state_dict)
+
         return cls(model, ExactCosineIndex.load(settings.gallery_path), settings)
 
     @torch.inference_mode()
     def identify(self, image: Image.Image) -> Identification:
-        tensor = self.transform(image).unsqueeze(0).to(self.settings.device)
-        embedding = self.model(tensor).squeeze(0).cpu().numpy().astype(np.float32)
+        pixel_values = preprocess_image(
+            self.image_processor,
+            image,
+        )
+        batch = pixel_values.unsqueeze(0).to(
+            self.settings.device
+        )
+        embedding = (
+            self.model(batch)
+            .squeeze(0)
+            .cpu()
+            .numpy()
+            .astype(np.float32)
+        )
         match = self.index.search(embedding, k=1)[0]
-        return Identification(match.identity, match.similarity)
+
+        return Identification(
+            identity=match.identity,
+            similarity=match.similarity,
+            matched_image_path=match.image_path,
+        )
 
