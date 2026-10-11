@@ -1,23 +1,985 @@
 <!doctype html>
 <html lang="en">
-  <head>
+
+<head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Wildlife Re-Identification</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-  </head>
-  <body>
-    <main>
-      <h1>Wildlife Re-Identification</h1>
-      <p>Upload a wildlife image to find the closest known individual.</p>
-      <form id="identify-form">
-        <label for="image">Wildlife image</label>
-        <input id="image" name="image" type="file" accept="image/*" required>
-        <button type="submit">Identify animal</button>
-      </form>
-      <section id="result" aria-live="polite"></section>
-    </main>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
-  </body>
+
+    <title>WildID AI</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='styles.css') }}"
+    >
+</head>
+
+<body>
+
+
+<!-- =========================
+     NAVIGATION
+========================= -->
+
+<nav class="nav">
+
+    <button class="brand" type="button">
+
+        <span class="brand-icon">
+
+            <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            >
+                <path d="M2 15c6.667-6 13.333 0 20-6"/>
+                <path d="M9 22c1.798-1.998 2.518-3.995 2.807-5.993"/>
+                <path d="M15 2c-1.798 1.998-2.518 3.995-2.807 5.993"/>
+                <path d="m17 6-2.5-2.5"/>
+                <path d="m14 8-1-1"/>
+                <path d="m7 18 2.5 2.5"/>
+                <path d="m3.5 14.5.5.5"/>
+                <path d="m20 9 .5.5"/>
+                <path d="m6.5 12.5 1 1"/>
+                <path d="m16.5 10.5 1 1"/>
+                <path d="m10 16 1.5 1.5"/>
+            </svg>
+
+        </span>
+
+
+        <span class="brand-name">
+            WildID <span>AI</span>
+        </span>
+
+    </button>
+
+
+   <div class="nav-links">
+    <button id="dashboard-nav" class="nav-link active" type="button">
+        Dashboard
+    </button>
+
+    <button id="identify-nav" class="nav-link" type="button">
+        Identify
+    </button>
+</div>
+
+
+   <!--  <span class="demo-badge">
+        v0.9 · Demo
+    </span> -->
+
+</nav>
+
+
+
+<!-- =========================
+     Dashboard - PAGE
+========================= -->
+
+<main id="dashboard-screen" class="page screen">
+
+
+    <!-- =========================
+         HERO
+    ========================== -->
+
+    <section class="hero">
+
+        <div class="hero-left">
+
+
+            <div class="model-badge">
+
+                <span class="model-dot"></span>
+
+                Swin Transformer · ArcFace · Deep Metric Learning
+
+            </div>
+
+
+            <h1 class="hero-title">
+
+                Wild<span>ID</span>
+                <em> AI</em>
+
+            </h1>
+
+
+            <p class="hero-kicker">
+                AI Wildlife Re-Identification
+            </p>
+
+
+            <h2 class="hero-subheading">
+                AI-Powered Individual Wildlife Re-Identification
+            </h2>
+
+
+            <p class="hero-text">
+                Identify known wildlife individuals by comparing
+                learned visual representations using Swin Transformer
+                and Deep Metric Learning.
+            </p>
+
+
+            <button
+                class="identify-button"
+                id="identify-animal"
+                type="button"
+            >
+
+                Identify Animal
+
+                <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+
+            </button>
+
+        </div>
+
+
+
+        <!--Leopard IMAGES -->
+
+        <div class="hero-images">
+
+
+            <div class="query-card">
+
+                <img
+                    src="https://images.unsplash.com/photo-1624958723474-05d32b99005f?w=600&h=600&fit=crop&auto=format"
+                    alt="Query leopard"
+                >
+
+                <span class="query-label">
+                    QUERY IMAGE
+                </span>
+
+            </div>
+
+
+            <div class="match-card">
+
+                <img
+                    src="https://images.unsplash.com/photo-1544985361-b420d7a77043?w=600&h=600&fit=crop&auto=format"
+                    alt="Closest matching leopard"
+                >
+
+                <span class="match-label">
+                    CLOSEST MATCH
+                </span>
+
+
+                <div class="match-score">
+                    LP-014 · 94.8%
+                </div>
+
+            </div>
+
+
+            <div class="image-arrow">
+
+                <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =========================
+         AI PIPELINE
+    ========================== -->
+
+    <section class="pipeline-section">
+
+        <p class="section-label">
+            AI Processing Pipeline
+        </p>
+
+
+        <div class="pipeline-card">
+
+
+            <!-- STEP 1 -->
+
+            <div class="pipeline-item">
+
+                <div class="pipeline-icon">
+
+                    <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <polyline points="16 16 12 12 8 16"/>
+                        <line x1="12" y1="12" x2="12" y2="21"/>
+                        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                    </svg>
+
+                </div>
+
+                <strong>
+                    Upload Image
+                </strong>
+
+                <span>
+                    Step 1
+                </span>
+
+            </div>
+
+
+            <div class="pipeline-arrow">
+                →
+            </div>
+
+
+
+            <!-- STEP 2 -->
+
+            <div class="pipeline-item">
+
+                <div class="pipeline-icon">
+
+                    <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <rect x="9" y="9" width="6" height="6"/>
+                        <rect x="2" y="2" width="20" height="20" rx="2.18"/>
+                        <line x1="7" y1="2" x2="7" y2="22"/>
+                        <line x1="17" y1="2" x2="17" y2="22"/>
+                        <line x1="2" y1="7" x2="22" y2="7"/>
+                        <line x1="2" y1="17" x2="22" y2="17"/>
+                    </svg>
+
+                </div>
+
+                <strong>
+                    Extract Features
+                </strong>
+
+                <span>
+                    Step 2
+                </span>
+
+            </div>
+
+
+            <div class="pipeline-arrow">
+                →
+            </div>
+
+
+
+            <!-- STEP 3 -->
+
+            <div class="pipeline-item">
+
+                <div class="pipeline-icon">
+
+                    <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                    >
+                        <rect x="3" y="3" width="7" height="7"/>
+                        <rect x="14" y="3" width="7" height="7"/>
+                        <rect x="14" y="14" width="7" height="7"/>
+                        <rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+
+                </div>
+
+                <strong>
+                    Compare Embeddings
+                </strong>
+
+                <span>
+                    Step 3
+                </span>
+
+            </div>
+
+
+            <div class="pipeline-arrow">
+                →
+            </div>
+
+
+
+            <!-- STEP 4 -->
+
+            <div class="pipeline-item">
+
+                <div class="pipeline-icon">
+
+                    <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="8.5" cy="7" r="4"/>
+                        <polyline points="17 11 19 13 23 9"/>
+                    </svg>
+
+                </div>
+
+                <strong>
+                    Identify Individual
+                </strong>
+
+                <span>
+                    Step 4
+                </span>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!--=========================
+         TECHNICAL CARDS
+    ========================== -->
+
+    <section class="technical-grid">
+
+
+        <article class="technical-card">
+
+            <strong>
+                Swin-T
+            </strong>
+
+            <p>
+                Backbone Architecture
+            </p>
+
+            <span>
+                Feature extraction
+            </span>
+
+        </article>
+
+
+        <article class="technical-card">
+
+            <strong>
+                ArcFace
+            </strong>
+
+            <p>
+                Metric Learning Loss
+            </p>
+
+            <span>
+                Deep Metric Learning
+            </span>
+
+        </article>
+
+
+        <article class="technical-card">
+
+            <strong>
+                cos(θ)
+            </strong>
+
+            <p>
+                Similarity Metric
+            </p>
+
+            <span>
+                Cosine distance
+            </span>
+
+        </article>
+
+
+        <article class="technical-card">
+
+            <strong>
+                Threshold
+            </strong>
+
+            <p>
+                Match Criterion
+            </p>
+
+            <span>
+                Calibrated during evaluation
+            </span>
+
+        </article>
+
+    </section>
+
+
+</main>
+
+<!--Upload image screen-->
+
+<main id="upload-screen" class="upload-page screen hidden">
+
+    <div class="upload-container">
+
+        <button
+            id="back-dashboard"
+            class="back-button"
+            type="button"
+        >
+            ← Back to Dashboard
+        </button>
+
+        <h1 class="upload-title">
+            Identify an Individual
+        </h1>
+
+        <p class="upload-subtitle">
+            Upload a wildlife image to compare it against known animal identities.
+        </p>
+
+
+        <!-- upload area -->
+        <div id="empty-upload-state" class="upload-zone">
+
+            <div class="upload-big-icon">
+                ↑
+            </div>
+
+            <h2>
+                Drag & drop an image here
+            </h2>
+
+            <p>
+                or click to browse · JPG, PNG, WebP supported
+            </p>
+
+            <button
+                id="browse-button"
+                class="upload-button"
+                type="button"
+            >
+                Upload Image
+            </button>
+
+            <input
+                id="image-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+            >
+
+        </div>
+
+
+        <p id="demo-image-text" class="demo-image-text">
+            No image?
+
+            <button
+                id="demo-image-button"
+                type="button"
+            >
+                Use demo leopard image
+            </button>
+        </p>
+
+
+        <!-- image after upload -->
+        <div id="uploaded-state" class="uploaded-card hidden">
+
+            <div class="uploaded-image-wrapper">
+
+                <img
+                    id="uploaded-preview"
+                    alt="Uploaded wildlife image"
+                >
+
+                <span class="uploaded-query-label">
+                    QUERY IMAGE
+                </span>
+
+                <button
+                    id="remove-image"
+                    class="remove-image-button"
+                    type="button"
+                >
+                    Remove
+                </button>
+
+            </div>
+
+
+            <div class="image-info-panel">
+
+                <div class="image-status">
+
+                    <span class="info-label">
+                        IMAGE STATUS
+                    </span>
+
+                    <div class="ready-row">
+
+                        <span class="ready-dot"></span>
+
+                        <strong>
+                            Ready for Analysis
+                        </strong>
+
+                    </div>
+
+                </div>
+
+
+                <div class="species-control">
+
+                    <label
+                        for="species-select"
+                        class="info-label"
+                    >
+                        OPTIONAL SPECIES
+                    </label>
+
+                    <select id="species-select">
+
+                        <option>Auto / Unknown</option>
+                        <option>African Leopard</option>
+                        <option>Plains Zebra</option>
+                        <option>Reticulated Giraffe</option>
+                        <option>African Cheetah</option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+        </div>
+
+<!--Analyse image uploaded-->
+        <button
+            id="analyse-button"
+            class="analyse-button hidden"
+            type="button"
+        >
+            Analyse Image →
+        </button>
+
+        <!--Demo-->
+        <button
+    id="demo-result-toggle"
+    class="demo-result-toggle"
+    type="button"
+>
+    ...
+</button>
+
+<!--Process image uploaded-->
+        <div id="processing-panel" class="processing-panel hidden">
+
+    <p class="processing-title">Processing image</p>
+
+    <div class="processing-steps">
+
+        <div class="processing-step">
+            <div class="processing-circle">1</div>
+            <span>Image Pre-processing</span>
+        </div>
+
+        <div class="processing-line"></div>
+
+        <div class="processing-step">
+            <div class="processing-circle">2</div>
+            <span>Swin Transformer</span>
+        </div>
+
+        <div class="processing-line"></div>
+
+        <div class="processing-step">
+            <div class="processing-circle">3</div>
+            <span>Feature Embedding</span>
+        </div>
+
+        <div class="processing-line"></div>
+
+        <div class="processing-step">
+            <div class="processing-circle">4</div>
+            <span>Similarity Search</span>
+        </div>
+
+    </div>
+
+</div>
+
+        <div id="processing-panel" class="processing-panel hidden">
+
+    <p class="processing-title">
+        Processing · AI Pipeline
+    </p>
+
+    <div class="processing-steps">
+
+        <div class="processing-step">
+            <div class="processing-circle">1</div>
+            <span>Image<br>Pre-processing</span>
+        </div>
+
+        <span class="processing-arrow">→</span>
+
+        <div class="processing-step">
+            <div class="processing-circle">2</div>
+            <span>Swin<br>Transformer</span>
+        </div>
+
+        <span class="processing-arrow">→</span>
+
+        <div class="processing-step">
+            <div class="processing-circle">3</div>
+            <span>Feature<br>Embedding</span>
+        </div>
+
+        <span class="processing-arrow">→</span>
+
+        <div class="processing-step">
+            <div class="processing-circle">4</div>
+            <span>Similarity<br>Search</span>
+        </div>
+
+    </div>
+
+</div>
+
+    </div>
+
+</main>
+
+<!--Results screen-->
+<main id="result-screen" class="result-page screen hidden">
+
+    <div class="result-container">
+
+        <button id="result-back" class="back-button" type="button">
+            ← Identify Another Animal
+        </button>
+
+        <div class="result-heading">
+            <div>
+                <p class="result-label">IDENTIFICATION RESULT</p>
+                <h1>Known Individual</h1>
+            </div>
+
+            <span class="known-badge">
+                KNOWN INDIVIDUAL
+            </span>
+        </div>
+
+
+        <div class="result-images">
+
+            <div class="result-image-box">
+                <p class="result-image-label">QUERY IMAGE</p>
+
+                <img
+                    id="result-query-image"
+                    alt="Query image"
+                >
+            </div>
+
+
+            <div class="result-arrow">
+                →
+            </div>
+
+
+            <div class="result-image-box best-match">
+                <p class="result-image-label">BEST MATCH</p>
+
+                <img
+                    src="https://images.unsplash.com/photo-1544985361-b420d7a77043?w=700&h=500&fit=crop&auto=format"
+                    alt="Best matching animal"
+                >
+            </div>
+
+        </div>
+
+
+        <div class="result-details">
+
+            <div class="result-detail">
+                <span>SPECIES</span>
+                <strong>African Leopard</strong>
+            </div>
+
+           <div class="result-detail">
+    <span>INDIVIDUAL ID</span>
+    <strong id="result-identity" class="individual-id">LP-014</strong>
+</div>
+
+<div class="result-detail">
+    <span>SIMILARITY SCORE</span>
+    <strong id="result-similarity" class="similarity-score">94.8%</strong>
+</div>
+
+        </div>
+
+
+        <div class="result-explanation">
+
+            <div>
+                <p class="result-label">WHY THIS RESULT?</p>
+
+                <p>
+                    The query embedding is most similar to the stored
+                    reference embeddings for individual LP-014.
+                </p>
+            </div>
+
+        </div>
+
+        <section class="matches-section">
+    <div class="matches-heading">
+        <div>
+            <p class="result-label">RETRIEVAL RESULTS</p>
+            <h2>Top Identity Matches</h2>
+        </div>
+
+        <span>Ranked by Cosine Similarity</span>
+    </div>
+
+    <div class="matches-table">
+
+        <div class="match-row match-header">
+            <span>Rank</span>
+            <span>Reference</span>
+            <span>Individual ID</span>
+            <span>Species</span>
+            <span>Similarity</span>
+        </div>
+
+        <div class="match-row top-match">
+            <span>01</span>
+
+            <img
+                src="https://images.unsplash.com/photo-1544985361-b420d7a77043?w=120&h=120&fit=crop&auto=format"
+                alt="Leopard reference"
+            >
+
+            <strong>LP-014</strong>
+            <span>African Leopard</span>
+            <strong>94.8%</strong>
+        </div>
+
+        <div class="match-row">
+            <span>02</span>
+
+            <img
+                src="https://images.unsplash.com/photo-1544979590-37e9b47eb705?w=120&h=120&fit=crop&auto=format"
+                alt="Leopard reference"
+            >
+
+            <strong>LP-031</strong>
+            <span>African Leopard</span>
+            <strong>82.3%</strong>
+        </div>
+
+        <div class="match-row">
+            <span>03</span>
+
+            <img
+                src="https://images.unsplash.com/photo-1496841733162-a88a250a275c?w=120&h=120&fit=crop&auto=format"
+                alt="Leopard reference"
+            >
+
+            <strong>LP-008</strong>
+            <span>African Leopard</span>
+            <strong>76.1%</strong>
+        </div>
+
+        <div class="match-row">
+            <span>04</span>
+
+            <img
+                src="https://images.unsplash.com/photo-1624958723474-05d32b99005f?w=120&h=120&fit=crop&auto=format"
+                alt="Leopard reference"
+            >
+
+            <strong>LP-055</strong>
+            <span>African Leopard</span>
+            <strong>61.4%</strong>
+        </div>
+
+        <div class="match-row">
+            <span>05</span>
+
+            <img
+                src="https://images.unsplash.com/photo-1637067788163-e43c2c4a40ed?w=120&h=120&fit=crop&auto=format"
+                alt="Leopard reference"
+            >
+
+            <strong>LP-002</strong>
+            <span>African Leopard</span>
+            <strong>58.7%</strong>
+        </div>
+
+    </div>
+</section>
+
+
+        <div class="demo-warning">
+            DEMO DATA — values are illustrative and not experimental results.
+        </div>
+
+
+        <button
+            id="identify-again"
+            class="analyse-button"
+            type="button"
+        >
+            Identify Another Animal →
+        </button>
+
+    </div>
+
+</main>
+
+<main id="unknown-result-screen" class="result-page screen hidden">
+
+    <div class="result-container">
+
+        <button id="unknown-back" class="back-button" type="button">
+            ← Identify Another Animal
+        </button>
+
+        <div class="unknown-heading">
+            <div>
+                <p class="result-label">IDENTIFICATION RESULT</p>
+                <h1>Potential New Individual</h1>
+
+                <p class="unknown-subtitle">
+                    No sufficiently similar known individual was found in the reference gallery.
+                </p>
+            </div>
+
+            <span class="review-badge">
+                REVIEW REQUIRED
+            </span>
+        </div>
+
+        <div class="unknown-image-card">
+
+            <img
+                id="unknown-query-image"
+                alt="Uploaded query image"
+            >
+
+            <span class="uploaded-query-label">
+                QUERY IMAGE
+            </span>
+
+        </div>
+
+        <div class="unknown-details">
+
+            <div>
+                <span>HIGHEST SIMILARITY</span>
+                <strong>54.2%</strong>
+            </div>
+
+            <div>
+                <span>STATUS</span>
+                <strong>Review Required</strong>
+            </div>
+
+        </div>
+
+        <div class="unknown-explanation">
+
+            <p class="result-label">
+                WHY THIS RESULT?
+            </p>
+
+            <p>
+                The query embedding did not meet the configured similarity
+                criterion for any known identity. The observation may represent
+                a previously unseen individual and should be reviewed.
+            </p>
+
+        </div>
+
+        <div class="demo-warning">
+            DEMO DATA — values are illustrative and not experimental results.
+        </div>
+
+        <button
+            id="unknown-identify-again"
+            class="analyse-button"
+            type="button"
+        >
+            Identify Another Animal →
+        </button>
+
+    </div>
+
+</main>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+
+</body>
 </html>
+
 
