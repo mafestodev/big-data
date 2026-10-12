@@ -3,7 +3,15 @@ from __future__ import annotations
 import time
 from typing import Protocol
 
-from flask import Flask, jsonify, render_template, request
+from flask import (
+    Flask,
+    jsonify,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
+from werkzeug.exceptions import NotFound
 
 from wildlife_reid.api.preprocessing import InvalidImageError, decode_rgb_image
 from wildlife_reid.common.config import Settings
@@ -41,6 +49,30 @@ def create_app(settings: Settings | None = None, identifier: Identifier | None =
             }
         )
 
+    @app.get("/api/v1/reference-image")
+    def reference_image():
+        relative_path = request.args.get("path", type=str)
+
+        if not relative_path:
+            return jsonify(
+                {"error": "Provide the reference image path"}
+            ), 400
+
+        if not settings.dataset_path.is_dir():
+            return jsonify(
+                {"error": "The reference image dataset is not available"}
+            ), 503
+
+        try:
+            return send_from_directory(
+                directory=settings.dataset_path,
+                path=relative_path,
+            )
+        except NotFound:
+            return jsonify(
+                {"error": "Reference image not found"}
+            ), 404
+
     @app.post("/api/v1/identify")
     def identify():
         service = app.extensions["wildlife_identifier"]
@@ -64,6 +96,10 @@ def create_app(settings: Settings | None = None, identifier: Identifier | None =
                 "predicted_identity": result.identity,
                 "similarity_score": round(result.similarity, 6),
                 "matched_image_path": result.matched_image_path,
+                "matched_image_url": url_for(
+                    "reference_image",
+                    path=result.matched_image_path,
+                ),
                 "processing_time_ms": elapsed_ms,
             }
         )

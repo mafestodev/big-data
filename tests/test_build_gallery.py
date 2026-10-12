@@ -13,13 +13,23 @@ def write_metadata(path: Path) -> None:
     with path.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(
             stream,
-            fieldnames=["path", "identity", "split"],
+            fieldnames=["path", "identity", "species", "split"],
         )
         writer.writeheader()
         writer.writerows(
             [
-                {"path": "train.jpg", "identity": "animal-a", "split": "train"},
-                {"path": "test.jpg", "identity": "animal-a", "split": "test"},
+                {
+                    "path": "train.jpg",
+                    "identity": "animal-a",
+                    "species": "zebra",
+                    "split": "train",
+                },
+                {
+                    "path": "test.jpg",
+                    "identity": "animal-a",
+                    "species": "zebra",
+                    "split": "test",
+                },
             ]
         )
 
@@ -32,6 +42,7 @@ def test_load_metadata_selects_requested_split(tmp_path: Path):
 
     assert len(metadata) == 1
     assert metadata[0]["path"] == "train.jpg"
+    assert metadata[0]["species"] == "zebra"
 
 
 def test_extract_model_state_dict_from_training_checkpoint():

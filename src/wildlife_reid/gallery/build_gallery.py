@@ -52,6 +52,7 @@ class EmbeddingDataset(Dataset):
         return (
             pixel_values,
             row["identity"],
+            row["species"],
             row["path"],
         )
 
@@ -75,7 +76,7 @@ def load_metadata(metadata_path, split="train"):
         reader = csv.DictReader(file)
         fieldnames = reader.fieldnames or []
 
-        required_columns = {"path", "identity"}
+        required_columns = {"path", "identity", "species"}
 
         if split is not None:
             required_columns.add("split")
@@ -196,6 +197,7 @@ def generate_embeddings(checkpoint_path, metadata_path, dataset_path, output_pat
 
     embeddings = []
     identities = []
+    species = []
     image_paths = []
 
     print("Generating embeddings...")
@@ -204,6 +206,7 @@ def generate_embeddings(checkpoint_path, metadata_path, dataset_path, output_pat
         for batch_index, (
             images,
             batch_identities,
+            batch_species,
             batch_image_paths,
         ) in enumerate(loader):
             images = images.to(
@@ -218,6 +221,7 @@ def generate_embeddings(checkpoint_path, metadata_path, dataset_path, output_pat
             )
 
             identities.extend(batch_identities)
+            species.extend(batch_species)
             image_paths.extend(batch_image_paths)
 
             if (batch_index + 1) % 100 == 0:
@@ -235,6 +239,11 @@ def generate_embeddings(checkpoint_path, metadata_path, dataset_path, output_pat
         dtype=str,
     )
 
+    species = np.asarray(
+        species,
+        dtype=str,
+    )
+
     image_paths = np.asarray(
         image_paths,
         dtype=str,
@@ -248,6 +257,11 @@ def generate_embeddings(checkpoint_path, metadata_path, dataset_path, output_pat
     if len(embeddings) != len(image_paths):
         raise RuntimeError(
             "Number of embeddings does not match number of image paths."
+        )
+
+    if len(embeddings) != len(species):
+        raise RuntimeError(
+            "Number of embeddings does not match number of species labels."
         )
 
     if embeddings.shape[1] != settings.embedding_dimension:
@@ -286,6 +300,7 @@ def generate_embeddings(checkpoint_path, metadata_path, dataset_path, output_pat
         output_path,
         embeddings=embeddings,
         identities=identities,
+        species=species,
         image_paths=image_paths,
     )
 
@@ -293,6 +308,7 @@ def generate_embeddings(checkpoint_path, metadata_path, dataset_path, output_pat
     print("Embedding generation complete.")
     print("Embedding shape:", embeddings.shape)
     print("Identity labels:", len(identities))
+    print("Species labels:", len(species))
     print("Image paths:", len(image_paths))
     print("Saved to:", output_path)
 
@@ -335,7 +351,7 @@ def main():
     parser.add_argument(
         "--metadata",
         required=True,
-        help="CSV containing path and identity columns",
+        help="CSV containing path, identity and species columns",
     )
 
     parser.add_argument(

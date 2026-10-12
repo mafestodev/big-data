@@ -148,6 +148,7 @@ const processingSteps = document.querySelectorAll(".processing-step");
 //Image results 
 const resultScreen = document.getElementById("result-screen");
 const resultQueryImage = document.getElementById("result-query-image");
+const resultMatchImage = document.getElementById("result-match-image");
 const resultBack = document.getElementById("result-back");
 const identifyAgain = document.getElementById("identify-again");
 
@@ -277,6 +278,8 @@ if (!response.ok) {
 }
 
     resultIdentity.textContent = data.predicted_identity;
+    resultMatchImage.src = data.matched_image_url;
+    resultMatchImage.alt = `Best match for ${data.predicted_identity}`;
 
     const similarityPercent = data.similarity_score * 100;
     resultSimilarity.textContent = `${similarityPercent.toFixed(1)}%`;

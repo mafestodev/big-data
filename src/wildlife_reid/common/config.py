@@ -62,6 +62,9 @@ class Settings:
     # Gallery location used later by inference.
     gallery_path: Path = PROJECT_ROOT / "gallery" / "embeddings.npz"
 
+    # Root directory containing the images referenced by gallery image paths.
+    dataset_path: Path = PROJECT_ROOT / "data" / "archive"
+
     # Maximum size of an uploaded image accepted by the API.
     max_upload_bytes: int = 10 * 1024 * 1024
 
@@ -143,6 +146,12 @@ class Settings:
                 os.getenv(
                     "WILDLIFE_GALLERY_PATH",
                     str(cls.gallery_path),
+                )
+            ),
+            dataset_path=Path(
+                os.getenv(
+                    "WILDLIFE_DATASET_PATH",
+                    str(cls.dataset_path),
                 )
             ),
             max_upload_bytes=int(
