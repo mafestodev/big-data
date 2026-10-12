@@ -1,0 +1,14 @@
+WILDLIFE RE-IDENTIFICATION EVALUATION
+========================================
+Top-1 accuracy: 68.24%
+Top-5 accuracy: 74.61%
+Precision@5: 61.63%
+Mean Average Precision (mAP): 64.04%
+
+Known-identity queries: 22,745
+Unseen-identity queries: 7,816
+Identity coverage: 74.42%
+
+Note: closed-set metrics exclude queries whose identities
+are not represented in the gallery.
+Open-set rejection performance is not measured.
