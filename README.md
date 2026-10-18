@@ -31,15 +31,6 @@ gallery/        Generated gallery embeddings and identity metadata
 tests/          Unit and API tests
 ```
 
-## Eli - How to test it
-
-Install NumPy if necessary:
-In terminal type "pip install numpy"
-
-Then run "python tests/test_metrics.py"
-
-The test uses fake embeddings and fake individual IDs to confirm that the evaluation calculations work.
-
 ## Quick start
 
 Create a virtual environment and install the project:
@@ -50,15 +41,14 @@ source .venv/bin/activate
 python -m pip install -e '.[dev]'
 ```
 
-Run the placeholder API:
+Run the application:
 
 ```bash
 wildlife-api
 ```
 
-Then open `http://127.0.0.1:5000`. The health endpoint works immediately.
-Identification becomes available after a compatible model checkpoint and
-gallery have been generated.
+Then open `http://127.0.0.1:5000`. Identification is available when compatible
+model and gallery artifacts exist at the configured paths.
 
 Run tests:
 

@@ -94,6 +94,7 @@ def create_app(settings: Settings | None = None, identifier: Identifier | None =
         return jsonify(
             {
                 "predicted_identity": result.identity,
+                "species": result.species,
                 "similarity_score": round(result.similarity, 6),
                 "matched_image_path": result.matched_image_path,
                 "matched_image_url": url_for(

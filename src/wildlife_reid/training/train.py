@@ -6,14 +6,13 @@ import os
 from pathlib import Path
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from wildlife_reid.common.config import Settings
 from wildlife_reid.training.arcface import ArcFace
 from wildlife_reid.training.dataset import create_train_loader
 from wildlife_reid.training.model import SwinEmbeddingModel
 from wildlife_reid.training.preprocessing import create_image_processor
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -314,7 +313,7 @@ def train_model(
 
     model = model.to(device)
 
-    sample_images, sample_labels = next(
+    sample_images, _sample_labels = next(
         iter(train_loader)
     )
 
@@ -388,7 +387,6 @@ def train_model(
     KEEP_MID_EPOCH_FILES = False
 
     start_epoch = 0
-    start_batch = 0
 
     if resume:
         latest_checkpoint = find_latest_checkpoint(
@@ -406,7 +404,7 @@ def train_model(
             )
 
         else:
-            start_epoch, start_batch = load_checkpoint(
+            start_epoch, _start_batch = load_checkpoint(
                 checkpoint_path=latest_checkpoint,
                 model=model,
                 arcface=arcface,

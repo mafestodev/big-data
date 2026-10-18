@@ -9,6 +9,7 @@ import numpy as np
 @dataclass(frozen=True)
 class SearchResult:
     identity: str
+    species: str
     similarity: float
     image_path: str
 
@@ -20,6 +21,7 @@ class ExactCosineIndex:
         self,
         embeddings: np.ndarray,
         identities: np.ndarray,
+        species: np.ndarray,
         image_paths: np.ndarray,
     ) -> None:
         if embeddings.ndim != 2:
@@ -28,24 +30,27 @@ class ExactCosineIndex:
             raise ValueError("Gallery must contain at least one embedding")
         if (
             len(embeddings) != len(identities)
+            or len(embeddings) != len(species)
             or len(embeddings) != len(image_paths)
         ):
             raise ValueError(
-                "Gallery embeddings, identities and image paths must be aligned"
+                "Gallery embeddings, identities, species and image paths must be aligned"
             )
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         if np.any(norms == 0):
             raise ValueError("Gallery contains a zero-length embedding")
         self.embeddings = (embeddings / norms).astype(np.float32)
         self.identities = identities.astype(str)
+        self.species = species.astype(str)
         self.image_paths = image_paths.astype(str)
 
     @classmethod
-    def load(cls, path: Path) -> "ExactCosineIndex":
+    def load(cls, path: Path) -> ExactCosineIndex:
         with np.load(path, allow_pickle=False) as data:
             required_arrays = {
                 "embeddings",
                 "identities",
+                "species",
                 "image_paths",
             }
             missing = required_arrays.difference(data.files)
@@ -58,6 +63,7 @@ class ExactCosineIndex:
             return cls(
                 embeddings=data["embeddings"],
                 identities=data["identities"],
+                species=data["species"],
                 image_paths=data["image_paths"],
             )
 
@@ -77,6 +83,7 @@ class ExactCosineIndex:
         return [
             SearchResult(
                 identity=self.identities[position],
+                species=self.species[position],
                 similarity=float(scores[position]),
                 image_path=self.image_paths[position],
             )

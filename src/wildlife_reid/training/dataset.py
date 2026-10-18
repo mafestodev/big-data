@@ -2,7 +2,7 @@ import os
 
 import torch
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 from wildlife_reid.training.preprocessing import preprocess_image

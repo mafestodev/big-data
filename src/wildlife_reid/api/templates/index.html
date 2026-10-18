@@ -69,11 +69,6 @@
     </button>
 </div>
 
-
-   <!--  <span class="demo-badge">
-        v0.9 · Demo
-    </span> -->
-
 </nav>
 
 
@@ -97,9 +92,6 @@
             <div class="model-badge">
 
                 <span class="model-dot"></span>
-
-                Swin Transformer · ArcFace · Deep Metric Learning
-
             </div>
 
 
@@ -392,84 +384,6 @@
     </section>
 
 
-
-    <!--=========================
-         TECHNICAL CARDS
-    ========================== -->
-
-    <section class="technical-grid">
-
-
-        <article class="technical-card">
-
-            <strong>
-                Swin-T
-            </strong>
-
-            <p>
-                Backbone Architecture
-            </p>
-
-            <span>
-                Feature extraction
-            </span>
-
-        </article>
-
-
-        <article class="technical-card">
-
-            <strong>
-                ArcFace
-            </strong>
-
-            <p>
-                Metric Learning Loss
-            </p>
-
-            <span>
-                Deep Metric Learning
-            </span>
-
-        </article>
-
-
-        <article class="technical-card">
-
-            <strong>
-                cos(θ)
-            </strong>
-
-            <p>
-                Similarity Metric
-            </p>
-
-            <span>
-                Cosine distance
-            </span>
-
-        </article>
-
-
-        <article class="technical-card">
-
-            <strong>
-                Threshold
-            </strong>
-
-            <p>
-                Match Criterion
-            </p>
-
-            <span>
-                Calibrated during evaluation
-            </span>
-
-        </article>
-
-    </section>
-
-
 </main>
 
 <!--Upload image screen-->
@@ -527,19 +441,6 @@
 
         </div>
 
-
-        <p id="demo-image-text" class="demo-image-text">
-            No image?
-
-            <button
-                id="demo-image-button"
-                type="button"
-            >
-                Use demo leopard image
-            </button>
-        </p>
-
-
         <!-- image after upload -->
         <div id="uploaded-state" class="uploaded-card hidden">
 
@@ -585,28 +486,6 @@
 
                 </div>
 
-
-                <div class="species-control">
-
-                    <label
-                        for="species-select"
-                        class="info-label"
-                    >
-                        OPTIONAL SPECIES
-                    </label>
-
-                    <select id="species-select">
-
-                        <option>Auto / Unknown</option>
-                        <option>African Leopard</option>
-                        <option>Plains Zebra</option>
-                        <option>Reticulated Giraffe</option>
-                        <option>African Cheetah</option>
-
-                    </select>
-
-                </div>
-
             </div>
 
         </div>
@@ -619,16 +498,6 @@
         >
             Analyse Image →
         </button>
-
-        <!--Demo-->
-        <button
-    id="demo-result-toggle"
-    class="demo-result-toggle"
-    type="button"
->
-    ...
-</button>
-
 <!--Process image uploaded-->
         <div id="processing-panel" class="processing-panel hidden">
 
@@ -714,7 +583,7 @@
     <div class="result-container">
 
         <button id="result-back" class="back-button" type="button">
-            ← Identify Another Animal
+            Identify Another Animal
         </button>
 
         <div class="result-heading">
@@ -762,17 +631,17 @@
 
             <div class="result-detail">
                 <span>SPECIES</span>
-                <strong>African Leopard</strong>
+                <strong id="result-species">—</strong>
             </div>
 
            <div class="result-detail">
     <span>INDIVIDUAL ID</span>
-    <strong id="result-identity" class="individual-id">LP-014</strong>
+    <strong id="result-identity" class="individual-id">—</strong>
 </div>
 
 <div class="result-detail">
     <span>SIMILARITY SCORE</span>
-    <strong id="result-similarity" class="similarity-score">94.8%</strong>
+    <strong id="result-similarity" class="similarity-score">—</strong>
 </div>
 
         </div>
@@ -783,105 +652,12 @@
             <div>
                 <p class="result-label">WHY THIS RESULT?</p>
 
-                <p>
-                    The query embedding is most similar to the stored
-                    reference embeddings for individual LP-014.
+                <p id="result-explanation-text">
+                    The query embedding is compared with the stored reference
+                    embeddings using cosine similarity.
                 </p>
             </div>
 
-        </div>
-
-        <section class="matches-section">
-    <div class="matches-heading">
-        <div>
-            <p class="result-label">RETRIEVAL RESULTS</p>
-            <h2>Top Identity Matches</h2>
-        </div>
-
-        <span>Ranked by Cosine Similarity</span>
-    </div>
-
-    <div class="matches-table">
-
-        <div class="match-row match-header">
-            <span>Rank</span>
-            <span>Reference</span>
-            <span>Individual ID</span>
-            <span>Species</span>
-            <span>Similarity</span>
-        </div>
-
-        <div class="match-row top-match">
-            <span>01</span>
-
-            <img
-                src="https://images.unsplash.com/photo-1544985361-b420d7a77043?w=120&h=120&fit=crop&auto=format"
-                alt="Leopard reference"
-            >
-
-            <strong>LP-014</strong>
-            <span>African Leopard</span>
-            <strong>94.8%</strong>
-        </div>
-
-        <div class="match-row">
-            <span>02</span>
-
-            <img
-                src="https://images.unsplash.com/photo-1544979590-37e9b47eb705?w=120&h=120&fit=crop&auto=format"
-                alt="Leopard reference"
-            >
-
-            <strong>LP-031</strong>
-            <span>African Leopard</span>
-            <strong>82.3%</strong>
-        </div>
-
-        <div class="match-row">
-            <span>03</span>
-
-            <img
-                src="https://images.unsplash.com/photo-1496841733162-a88a250a275c?w=120&h=120&fit=crop&auto=format"
-                alt="Leopard reference"
-            >
-
-            <strong>LP-008</strong>
-            <span>African Leopard</span>
-            <strong>76.1%</strong>
-        </div>
-
-        <div class="match-row">
-            <span>04</span>
-
-            <img
-                src="https://images.unsplash.com/photo-1624958723474-05d32b99005f?w=120&h=120&fit=crop&auto=format"
-                alt="Leopard reference"
-            >
-
-            <strong>LP-055</strong>
-            <span>African Leopard</span>
-            <strong>61.4%</strong>
-        </div>
-
-        <div class="match-row">
-            <span>05</span>
-
-            <img
-                src="https://images.unsplash.com/photo-1637067788163-e43c2c4a40ed?w=120&h=120&fit=crop&auto=format"
-                alt="Leopard reference"
-            >
-
-            <strong>LP-002</strong>
-            <span>African Leopard</span>
-            <strong>58.7%</strong>
-        </div>
-
-    </div>
-</section>
-
-
-        <div class="demo-warning">
-            DEMO DATA — values are illustrative and not experimental results.
         </div>
 
 
@@ -890,87 +666,7 @@
             class="analyse-button"
             type="button"
         >
-            Identify Another Animal →
-        </button>
-
-    </div>
-
-</main>
-
-<main id="unknown-result-screen" class="result-page screen hidden">
-
-    <div class="result-container">
-
-        <button id="unknown-back" class="back-button" type="button">
-            ← Identify Another Animal
-        </button>
-
-        <div class="unknown-heading">
-            <div>
-                <p class="result-label">IDENTIFICATION RESULT</p>
-                <h1>Potential New Individual</h1>
-
-                <p class="unknown-subtitle">
-                    No sufficiently similar known individual was found in the reference gallery.
-                </p>
-            </div>
-
-            <span class="review-badge">
-                REVIEW REQUIRED
-            </span>
-        </div>
-
-        <div class="unknown-image-card">
-
-            <img
-                id="unknown-query-image"
-                alt="Uploaded query image"
-            >
-
-            <span class="uploaded-query-label">
-                QUERY IMAGE
-            </span>
-
-        </div>
-
-        <div class="unknown-details">
-
-            <div>
-                <span>HIGHEST SIMILARITY</span>
-                <strong>54.2%</strong>
-            </div>
-
-            <div>
-                <span>STATUS</span>
-                <strong>Review Required</strong>
-            </div>
-
-        </div>
-
-        <div class="unknown-explanation">
-
-            <p class="result-label">
-                WHY THIS RESULT?
-            </p>
-
-            <p>
-                The query embedding did not meet the configured similarity
-                criterion for any known identity. The observation may represent
-                a previously unseen individual and should be reviewed.
-            </p>
-
-        </div>
-
-        <div class="demo-warning">
-            DEMO DATA — values are illustrative and not experimental results.
-        </div>
-
-        <button
-            id="unknown-identify-again"
-            class="analyse-button"
-            type="button"
-        >
-            Identify Another Animal →
+            Identify Another Animal 
         </button>
 
     </div>

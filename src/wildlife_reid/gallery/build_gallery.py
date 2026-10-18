@@ -110,7 +110,7 @@ def extract_model_state_dict(checkpoint):
     """Support both complete training checkpoints and model-only artifacts."""
 
     if not isinstance(checkpoint, dict):
-        raise ValueError(
+        raise TypeError(
             "Checkpoint must be a dictionary containing model weights."
         )
 

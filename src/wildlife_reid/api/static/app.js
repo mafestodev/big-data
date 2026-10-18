@@ -15,8 +15,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const uploadedPreview = document.getElementById("uploaded-preview");
     const analyseButton = document.getElementById("analyse-button");
     const removeImage = document.getElementById("remove-image");
-    const demoImageText = document.getElementById("demo-image-text");
-    const demoImageButton = document.getElementById("demo-image-button");
 
     let selectedFile = null;
 
@@ -35,10 +33,8 @@ function openDashboard() {
     uploadScreen.classList.add("hidden");
 
     const resultScreen = document.getElementById("result-screen");
-    const unknownResultScreen = document.getElementById("unknown-result-screen");
 
     resultScreen?.classList.add("hidden");
-    unknownResultScreen?.classList.add("hidden");
 
     dashboardScreen.classList.remove("hidden");
 
@@ -83,7 +79,6 @@ function openDashboard() {
             uploadedPreview.src = event.target.result;
 
             emptyUploadState.classList.add("hidden");
-            demoImageText.classList.add("hidden");
 
             uploadedState.classList.remove("hidden");
             analyseButton.classList.remove("hidden");
@@ -126,19 +121,6 @@ function openDashboard() {
         analyseButton.classList.add("hidden");
 
         emptyUploadState.classList.remove("hidden");
-        demoImageText.classList.remove("hidden");
-    });
-
-    //demo image
-    demoImageButton?.addEventListener("click", () => {
-        uploadedPreview.src =
-            "https://images.unsplash.com/photo-1624958723474-05d32b99005f?w=900&h=700&fit=crop&auto=format";
-
-        emptyUploadState.classList.add("hidden");
-        demoImageText.classList.add("hidden");
-
-        uploadedState.classList.remove("hidden");
-        analyseButton.classList.remove("hidden");
     });
 
 //Processing uploadedd image
@@ -151,15 +133,6 @@ const resultQueryImage = document.getElementById("result-query-image");
 const resultMatchImage = document.getElementById("result-match-image");
 const resultBack = document.getElementById("result-back");
 const identifyAgain = document.getElementById("identify-again");
-
-//Results for unknown animals
-const unknownResultScreen = document.getElementById("unknown-result-screen");
-const unknownQueryImage = document.getElementById("unknown-query-image");
-const unknownBack = document.getElementById("unknown-back");
-const unknownIdentifyAgain = document.getElementById("unknown-identify-again");
-const demoResultToggle = document.getElementById("demo-result-toggle");
-
-let showUnknownResult = false;
 analyseButton?.addEventListener("click", async () => {
     if (!selectedFile) {
         alert("Please upload an image first.");
@@ -220,37 +193,14 @@ function goBackToUpload() {
     window.scrollTo(0, 0);
 }
 
-function backFromUnknownResult() {
-    unknownResultScreen.classList.add("hidden");
-    uploadScreen.classList.remove("hidden");
-
-    processingPanel.classList.add("hidden");
-    analyseButton.classList.remove("hidden");
-
-    processingSteps.forEach((item, index) => {
-        item.classList.remove("active", "done");
-        item.querySelector(".processing-circle").textContent = index + 1;
-    });
-
-    window.scrollTo(0, 0);
-}
-
-unknownBack?.addEventListener("click", backFromUnknownResult);
-unknownIdentifyAgain?.addEventListener("click", backFromUnknownResult);
-
 resultBack?.addEventListener("click", goBackToUpload);
 identifyAgain?.addEventListener("click", goBackToUpload);
 
-demoResultToggle?.addEventListener("click", () => {
-    showUnknownResult = !showUnknownResult;
-
-    demoResultToggle.textContent =
-        showUnknownResult ? "Unknown demo selected" : "...";
-});
-
 //Add the API call
 const resultIdentity = document.getElementById("result-identity");
+const resultSpecies = document.getElementById("result-species");
 const resultSimilarity = document.getElementById("result-similarity");
+const resultExplanation = document.getElementById("result-explanation-text");
 
 async function identifyWithApi() {
     if (!selectedFile) {
@@ -278,6 +228,10 @@ if (!response.ok) {
 }
 
     resultIdentity.textContent = data.predicted_identity;
+    resultSpecies.textContent = data.species;
+    resultExplanation.textContent =
+        `The query embedding is most similar to the stored reference ` +
+        `embedding for individual ${data.predicted_identity}.`;
     resultMatchImage.src = data.matched_image_url;
     resultMatchImage.alt = `Best match for ${data.predicted_identity}`;
 

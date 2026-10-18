@@ -19,6 +19,7 @@ from wildlife_reid.training.preprocessing import (
 @dataclass(frozen=True)
 class Identification:
     identity: str
+    species: str
     similarity: float
     matched_image_path: str
 
@@ -38,7 +39,7 @@ class InferenceService:
         )
 
     @classmethod
-    def load(cls, settings: Settings) -> "InferenceService":
+    def load(cls, settings: Settings) -> InferenceService:
         if not settings.checkpoint_path.exists():
             raise FileNotFoundError(f"Model checkpoint not found: {settings.checkpoint_path}")
         if not settings.gallery_path.exists():
@@ -80,6 +81,7 @@ class InferenceService:
 
         return Identification(
             identity=match.identity,
+            species=match.species,
             similarity=match.similarity,
             matched_image_path=match.image_path,
         )
