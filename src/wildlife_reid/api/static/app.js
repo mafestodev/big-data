@@ -129,8 +129,11 @@ const processingSteps = document.querySelectorAll(".processing-step");
 
 //Image results 
 const resultScreen = document.getElementById("result-screen");
+const resultImages = document.getElementById("result-images");
 const resultQueryImage = document.getElementById("result-query-image");
 const resultMatchImage = document.getElementById("result-match-image");
+const resultMatchBox = document.getElementById("result-match-box");
+const resultArrow = document.getElementById("result-arrow");
 const resultBack = document.getElementById("result-back");
 const identifyAgain = document.getElementById("identify-again");
 analyseButton?.addEventListener("click", async () => {

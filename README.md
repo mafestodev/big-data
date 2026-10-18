@@ -61,13 +61,74 @@ pytest
 Download WildlifeReID-10k using the URL in `data/dataset_url.txt`. Do not
 commit the full dataset or trained weights to Git.
 
+## Demo deployment
+
+The demonstration is published from the local machine through a Cloudflare
+Quick Tunnel. Cloudflare supplies a temporary public HTTPS address without
+requiring a Cloudflare account, domain, or cloud-compute subscription.
+
+The model, gallery embeddings, and dataset remain on the demonstration
+computer. The API uses the gallery's relative image path to serve the matched
+reference image through the tunnel together with the identity, species, and
+similarity result.
+
+Required local artifacts:
+
+```text
+models/swin_embedding_model.pt
+gallery/embeddings.npz
+data/archive/images/...
+```
+
+Install the deployment dependencies once:
+
+```bash
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+brew install cloudflared
+```
+
+Start the production application in one terminal:
+
+```bash
+./scripts/run_demo_server.sh
+```
+
+After `/health` reports that the model is ready, start the public tunnel in a
+second terminal:
+
+```bash
+./scripts/start_quick_tunnel.sh
+```
+
+Open the printed `https://*.trycloudflare.com` URL from another device. The URL
+remains active while both commands and the host computer continue running.
+
+To restrict the tunnel to one email address:
+
+```bash
+TUNNEL_ALLOWED_EMAIL="name@example.com" ./scripts/start_quick_tunnel.sh
+```
+
+See `docs/deployment.md` for validation and presentation guidance.
+
+## Container validation
+
+The Docker configuration remains available as evidence that the application is
+container-ready:
+
+```bash
+docker build -t wildlife-reid .
+docker run --rm -p 7860:7860 wildlife-reid
+```
+
 ## Initial technical choices
 
 - Backbone: `swin_tiny_patch4_window7_224`
 - Input resolution: 224 x 224 RGB
 - Embedding dimension: 512
 - Training loss: ArcFace
-- Retrieval: exact cosine similarity (replaceable with FAISS)
+- Retrieval: exact cosine similarity 
 - Serving: Flask REST API
 - Initial scope: closed-set individual identification
 

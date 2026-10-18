@@ -37,8 +37,16 @@ def test_health_reports_model_ready():
     assert response.get_json() == {"model_ready": True, "status": "ok"}
 
 
-def test_identify_returns_prediction():
-    client = create_app(identifier=FakeIdentifier()).test_client()
+def test_identify_returns_prediction(tmp_path):
+    dataset_path = tmp_path / "dataset"
+    reference_path = dataset_path / "animals" / "animal-00482.jpg"
+    reference_path.parent.mkdir(parents=True)
+    Image.new("RGB", (12, 12), "brown").save(reference_path)
+
+    client = create_app(
+        settings=Settings(dataset_path=dataset_path),
+        identifier=FakeIdentifier(),
+    ).test_client()
 
     response = client.post(
         "/api/v1/identify",

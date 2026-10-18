@@ -6,7 +6,6 @@ from pathlib import Path
 
 import torch
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -72,7 +71,7 @@ class Settings:
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
     @classmethod
-    def from_environment(cls) -> "Settings":
+    def from_environment(cls) -> Settings:
         return cls(
             model_name=os.getenv(
                 "WILDLIFE_MODEL_NAME",
