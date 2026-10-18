@@ -1,14 +1,28 @@
-WILDLIFE RE-IDENTIFICATION EVALUATION
-========================================
-Top-1 accuracy: 68.24%
-Top-5 accuracy: 74.61%
-Precision@5: 61.63%
-Mean Average Precision (mAP): 64.04%
+WILDLIFE RE-IDENTIFICATION — VALIDATED COVERAGE REPORT
+==========================================================
+Checkpoint recorded: swin_embedding_model.pt
+Similarity measure: Cosine similarity
+Gallery images: 109,927
+Total test queries: 30,561
+Embedding dimensions: 512
 
-Known-identity queries: 22,745
-Unseen-identity queries: 7,816
-Identity coverage: 74.42%
+IDENTITY COVERAGE
+------------------------------
+Known-identity queries: 22,745 (74.42%)
+Unseen-identity queries: 7,816 (25.58%)
 
-Note: closed-set metrics exclude queries whose identities
-are not represented in the gallery.
-Open-set rejection performance is not measured.
+CLOSED-SET RETRIEVAL METRICS
+------------------------------
+Top-1 accuracy: 69.66%
+Top-5 accuracy: 75.06%
+Precision@5: 63.82%
+Mean Average Precision (mAP): 67.39%
+Queries included in closed-set metrics: 22,745
+
+EVALUATION NOTES
+------------------------------
+Unseen identities are excluded from closed-set metrics.
+Open-set identity rejection performance is not measured.
+Verify query/gallery image separation and the evaluation protocol before presenting these as final results.
+The checkpoint name is recorded from the notebook setup; the NPZ files do not independently verify checkpoint provenance.
+Runtime: 6.1 minutes
