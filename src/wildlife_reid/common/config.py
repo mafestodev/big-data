@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -31,7 +32,7 @@ class Settings:
 
     # Number of complete passes through the training dataset.
     # Colab can override this with WILDLIFE_NUM_EPOCHS.
-    num_epochs: int = 50
+    num_epochs: int = 24
 
     # ArcFace parameters.
     arcface_scale: float = 64.0
@@ -71,7 +72,7 @@ class Settings:
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
     @classmethod
-    def from_environment(cls) -> Settings:
+    def from_environment(cls) -> "Settings":
         return cls(
             model_name=os.getenv(
                 "WILDLIFE_MODEL_NAME",
