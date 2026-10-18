@@ -14,8 +14,8 @@ dependencies = [
   "Pillow>=10,<12",
   "torch>=2.2,<3",
   "torchvision>=0.17,<1",
-  "timm>=1.0,<2",
-    "transformers>=4.40,<6",
+  "transformers>=4.40,<6",
+  "gunicorn>=22,<24",
 ]
 
 [project.optional-dependencies]
@@ -31,6 +31,9 @@ wildlife-build-gallery = "wildlife_reid.gallery.build_gallery:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"wildlife_reid.api" = ["templates/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

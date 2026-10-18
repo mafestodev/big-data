@@ -1456,6 +1456,10 @@ button {
     gap: 15px;
 }
 
+.result-images.query-only {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .result-image-box {
     position: relative;
     height: 320px;
